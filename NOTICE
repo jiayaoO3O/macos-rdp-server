@@ -1,0 +1,24 @@
+macOS RDP Server / rdp-server
+
+Copyright 2026 rdp-server contributors
+
+This product includes software developed by the FreeRDP Project
+(https://www.freerdp.com/), including WinPR, used under the Apache
+License, Version 2.0.
+
+This product includes software developed by the OpenSSL Project for use
+in the OpenSSL Toolkit (https://www.openssl.org/), used under the
+Apache License, Version 2.0.
+
+This product includes JSON-C (https://github.com/json-c/json-c), used
+under the MIT License.
+
+The rdp-worker and rdpctl helpers are built with cgo and link dynamically
+against the FreeRDP/WinPR, OpenSSL and json-c libraries listed above; the
+release DMG distributes those shared libraries in Contents/Frameworks.
+They also statically include the Go runtime (https://go.dev/), used under
+the BSD 3-Clause License.
+
+See THIRD-PARTY-NOTICES.md for component versions, the exact files
+distributed, the full MIT and BSD license texts, and the upstream
+attribution notices. The Apache License, Version 2.0 text is in LICENSE.
