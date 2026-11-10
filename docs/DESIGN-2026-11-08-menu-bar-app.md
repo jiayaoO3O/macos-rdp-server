@@ -44,7 +44,7 @@
 ## 2. 代码结构
 
     native/macos/Sources/RDPServerCore/
-      Version.swift             版本常量（当前 0.2.2）
+      Version.swift             版本常量（当前 0.2.3）
       SecureFile.swift          0600 原子写 / lstat 校验（tmp+rename，fchmod，fsync）
       ServerPaths.swift         数据目录解析与私有布局校验；socket 路径长度校验
       HelperLocator.swift       helper 解析顺序：env -> bundle Contents/Helpers -> repo/bin -> 可执行文件目录
@@ -84,6 +84,7 @@
     <data>/key.pem, cert.pem       自签名 TLS 材料
     <data>/certificate-addresses   SAN 记录（0600，元数据，不作为信任来源）
     <data>/agent.sock              Worker<->Agent Unix socket（Worker 创建，0600）
+    <data>/worker.lease            App 拉起的 Worker 身份（PID/启动时间/路径，0600）
     <data>/agent-generation        Agent generation 计数（0600）
     <data>/logs/worker.log         Worker stdout+stderr（Go log 与 C event= 行同一文件）
     <data>/logs/agent.log          Agent stdout/stderr
@@ -121,18 +122,24 @@
 
 ## 5. 启动序列（关键实现细节）
 
-1. 重新从磁盘读取 config.json（external edit 生效），要求 SAM 里有合法账号；
-2. 校验配置（address/port/account/绝对路径，规则与 Go 侧一致）；
-3. 确保证书：按当前地址集（127.0.0.1 + LAN 模式下的私有 IPv4）检查 SAN，不匹配则重建；
-4. 若 config 与磁盘不一致（例如首次保存账号）则写回；
-5. 轮转超过 32 MiB 的 worker.log / agent.log 到 .1（只在写者停止时做，避免丢日志）；
-6. **先 unlink 旧 agent.sock**（见下方陷阱）；
-7. spawn Worker：rdp-worker -config <abs> -agent-socket <abs>，stdout/stderr 追加到 logs/worker.log；
-8. 就绪判定（最多 10s，见 §5.1）；成功后记录监听地址；
-9. spawn Agent：RDPAgent.app/Contents/MacOS/rdp-agent stream-snapshot <socket> 0 0 <generation>，
+1. 清理上一轮崩溃/SIGKILL 遗留的 Worker：读取 `<data>/worker.lease` 并按
+   PID + 启动时间 + 可执行路径校验身份，SIGTERM 后最多等 10s 再 SIGKILL；
+   lease 缺失/不可用时用 `/bin/ps` 扫描同一 `-config <abs>/config.json` 的
+   `rdp-worker` 回退。仍有进程存活时拒绝启动（不再 spawn 一个会撞端口的 Worker）；
+2. 重新从磁盘读取 config.json（external edit 生效），要求 SAM 里有合法账号；
+3. 校验配置（address/port/account/绝对路径，规则与 Go 侧一致）；
+4. 确保证书：按当前地址集（127.0.0.1 + LAN 模式下的私有 IPv4）检查 SAN，不匹配则重建；
+5. 若 config 与磁盘不一致（例如首次保存账号）则写回；
+6. 轮转超过 32 MiB 的 worker.log / agent.log 到 .1（只在写者停止时做，避免丢日志）；
+7. **先 unlink 旧 agent.sock**（见下方陷阱）；
+8. spawn Worker：rdp-worker -config <abs> -agent-socket <abs>，stdout/stderr 追加到 logs/worker.log；
+9. 写入 `<data>/worker.lease`（0600；PID + 启动时间 + 实际可执行路径；写失败只记日志，
+   下次启动仍有 `/bin/ps` 回退）；
+10. 就绪判定（最多 10s，见 §5.1）；成功后记录监听地址；
+11. spawn Agent：RDPAgent.app/Contents/MacOS/rdp-agent stream-snapshot <socket> 0 0 <generation>，
    环境 RDP_AGENT_NO_PERMISSION_REQUEST=1 RDP_AGENT_DELTA_FRAMES=1 RDP_AGENT_CAPTURE_STREAM=1
    RDP_AGENT_TARGET_FPS=60 RDP_AGENT_VIRTUAL_DISPLAY=1（与 scripts/run-agent-stream.sh 一致）；
-10. 写入 agent-generation（0600），状态置 running，启动 1s 监控定时器。
+12. 写入 agent-generation（0600），状态置 running，启动 1s 监控定时器。
 
 ### 5.1 就绪判定
 
@@ -152,7 +159,24 @@ Agent -> Worker -> unlink，Worker 被 SIGKILL 也仍会 unlink。
 ## 6. 停止、崩溃与重启策略
 
 - 停止：先 SIGTERM Agent（最多等 5s，再 SIGKILL）——它需要恢复显示排列；
-  再 SIGTERM Worker（5s -> SIGKILL）；最后 unlink socket、清理状态。
+  再 SIGTERM Worker（最多等 10s，再 SIGKILL）；最后 unlink socket、清理状态。
+  Worker 的 `address:auto` 监督进程还需最多 5s 停止其 FreeRDP 子进程，Worker
+  宽限期必须大于该窗口，避免 App 提前 SIGKILL Worker 而遗留监听进程。
+  所有 Worker 终止路径（正常停止、启动就绪失败、deinit 兜底）都必须使用
+  `workerStopGrace`，不能再用 1~2s 的短宽限，否则同样会留下孤儿监听进程。
+- 启动：先读取 `<data>/worker.lease`（0600，PID + 进程启动时间 + 可执行路径），
+  校验身份后 SIGTERM，超过 `workerStopGrace` 再 SIGKILL；lease 缺失/不可用时用
+  `/bin/ps` 扫描命令行为同一 `-config <data>/config.json` 的 `rdp-worker` 作为
+  旧版本回退。清理失败（仍有进程存活）时拒绝启动并在 UI 显示 Worker 启动失败，
+  不再盲目 spawn 一个会撞端口的 Worker。
+- App 被 `SIGKILL` 或崩溃：App 拉起的 Worker 环境中有
+  `RDP_WORKER_MANAGED_BY_APP=1`，Worker 每 500ms 检查父进程；被 launchd
+  reparent（`getppid()==1`）后记录 `event=worker_parent_exited`，`address:auto`
+  监督进程先停止 FreeRDP 子进程再退出，普通 Worker 直接退出。手工/launchd
+  形态不带该变量，生命周期不变。
+- `address:auto` 监督进程在每次启动子进程前 unlink 旧 socket：子进程崩溃或
+  被 SIGTERM 后不会自己清理 socket，不 unlink 会让下一次 C listener 静默
+  拒绝监听（`reason=no_frame`）。
 - Worker 意外退出：状态置 error，lastError 含退出码与日志尾部，终止 Agent、unlink socket。
   （不自动重启 Worker：每次重启都可能断开会话，交由用户点开关。）
 - Agent 意外退出：30s 窗口内最多重启 3 次（间隔 300ms），超过则 AgentState=failed 并记录原因；
@@ -368,7 +392,7 @@ releaseStuckKeys() 返回 notSupported 并记录 result=not_supported。UI 必�
 
     {
       "account": null, "address": "127.0.0.1:3389", "agent": {"detail": null, "state": "waiting"},
-      "allow_lan": false, "app_version": "0.2.2", "configured": false,
+      "allow_lan": false, "app_version": "0.2.3", "configured": false,
       "data_directory": "/tmp/x/data", "enabled": false, "error": null, "last_error": null,
       "listen_host": "127.0.0.1", "logs_directory": "/tmp/x/data/logs", "ok": true,
       "permissions": {"accessibility": true, "screen_recording": true},
@@ -396,7 +420,9 @@ releaseStuckKeys() 返回 notSupported 并记录 result=not_supported。UI 必�
   worker.tcp_connect。
 - agent.frames（可选）：Agent 帧流；若权限未授予则 ok=true 且 detail 写
   "skipped: ..."（跨机器不硬失败），权限已授予时必须观测到 capturing 帧。
-- cleanup.*（可选）：停止后状态 disabled、无残留 PID、socket 已删除。
+- cleanup.*：宽限不变量；`--with-service` 时 seed 一个 stale Worker 并断言
+  `stale_worker_lease`/`stale_worker_scan`/`stale_worker_removed`/`stale_worker_lease_source`
+  均通过；停止后状态 disabled、无残留 PID、socket 与 worker.lease 已删除。
 
 安全约束：自检只使用临时数据目录、随机 loopback 端口、随机账号密码；不连接任何 RDP 客户端
 （不会触发 Agent 的虚拟显示器）；结束时停止所有子进程。

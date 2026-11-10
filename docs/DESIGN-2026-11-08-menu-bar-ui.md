@@ -149,7 +149,7 @@ RDPServer 只负责在返回 nil 时启动 GUI。packaging 的 DMG 验证脚本�
 ```sh
 RDPServer --status   [--data-dir PATH]   # 单个 JSON 对象，stdout；成功报告 exit 0
 RDPServer --self-test[--data-dir PATH]   # 单个 JSON 对象，stdout；全部检查通过 exit 0
-RDPServer --version                      # "RDPServer 0.2.2"，exit 0
+RDPServer --version                      # "RDPServer 0.2.3"，exit 0
 RDPServer --help                         # 用法，exit 0
 # 无上述 flag → 菜单栏 GUI
 ```
@@ -162,7 +162,7 @@ RDPServer --help                         # 用法，exit 0
 - 示例（本机实测，全新临时目录）：
 
 ```json
-{"ok":true,"app_version":"0.2.2","data_directory":"/tmp/x","state":"disabled","configured":false,
+{"ok":true,"app_version":"0.2.3","data_directory":"/tmp/x","state":"disabled","configured":false,
  "enabled":false,"address":null,"listen_host":"127.0.0.1","port":3389,"allow_lan":false,
  "account":null,"principal":null,
  "permissions":{"screen_recording":true,"accessibility":true},
@@ -288,6 +288,8 @@ RDPSERVER_UI_SMOKE=1 RDPSERVER_DATA_DIR=/tmp/rdpserver-smoke \
    不伪造状态。若 core 以后提供检测，加一行映射即可。
 3. 弹窗高度上限 720 pt 且无内部滚动；内容继续增长时需加 `ScrollView`（需同时改尺寸上报）。
 4. 退出只在正常 UI 路径 await `shutdown()`；`applicationWillTerminate` 仅兜底说明。
-   若进程被 `SIGKILL`，子进程清理依赖 core 下次启动的残留清理。
+   若进程被 `SIGKILL`，App 拉起的 Worker 通过 `RDP_WORKER_MANAGED_BY_APP` 看门狗
+   发现父进程消失后自行退出（并停止 `address:auto` 监督的 FreeRDP 子进程），
+   不依赖下次启动的残留清理；下次启动仍会 unlink 可能残留的 socket。
 5. 账号编辑为弹窗内整页（非 NSWindow sheet），见 §4 原因；若未来弹窗改为独立窗口可换回 sheet。
 6. 菜单栏图标状态目前只区分 4 种；如需“未配置”“缺少权限”等提示需扩展 `MenuBarIcon`。

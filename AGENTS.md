@@ -11,7 +11,7 @@
 | 项目 | macOS RDP **早期原型**：让已在本机登录的 Mac 用户用 Windows RDP 客户端控制**当前用户桌面** |
 | 语言 | Go 1.27（无第三方 Go 依赖）+ cgo C（FreeRDP/WinPR 3.32.2）+ Swift（SwiftPM tools 5.9）+ Python 3（脚本仅标准库；图标脚本可选 Pillow）+ Makefile |
 | 形态 | 菜单栏 App `RDPServer.app` 自管 worker + 嵌套 Agent（推荐/已验收）；手工 `bin/rdp-worker` + Agent / LaunchAgent 为开发者形态 |
-| 版本 | `0.2.2`（`native/macos/Sources/RDPServerCore/Version.swift`） |
+| 版本 | `0.2.3`（`native/macos/Sources/RDPServerCore/Version.swift`） |
 | 平台 | Apple Silicon / arm64（仅）；最低 **macOS 14.0**；macOS 26/27 构建兼容见 DEPENDENCIES §4.3 |
 | 依赖 | FreeRDP/WinPR **3.32.2**（归档 SHA-256 固定）、Homebrew `openssl@3`、`json-c`、`pkgconf`、CMake 4.x（实测可用）、Xcode Command Line Tools（无需完整 Xcode） |
 | 许可证 | 项目 **Apache-2.0**；FreeRDP/WinPR 与 OpenSSL 为 Apache-2.0，json-c 为 MIT，Go runtime 为 BSD-3-Clause（静态链接进 helper；见 `THIRD-PARTY-NOTICES.md`） |
@@ -96,7 +96,7 @@
 | `make test-protocol` | 依赖 `make build`，跑 35 例 loopback E2E（~90–100 s）；会覆盖 `bin/` |
 | `make agent-build` / `agent-check` | 构建 `bin/rdp-agent` / 用 `swiftc` 编译手写清单并跑纯逻辑测试 |
 | `make agent-app` | 打包 ad-hoc 签名 `bin/RDPAgent.app`（TCC 身份；部署 Agent 的正确产物） |
-| `make app-build` / `app-dmg` | Swift release 构建（含菜单栏 App）/ 组装 `dist/RDPServer.app` + `dist/RDPServer-0.2.2.dmg`（不覆盖 `bin/`） |
+| `make app-build` / `app-dmg` | Swift release 构建（含菜单栏 App）/ 组装 `dist/RDPServer.app` + `dist/RDPServer-0.2.3.dmg`（不覆盖 `bin/`） |
 | `make test-app` / `test-app-bundle` | App 核心无头契约 / 只读挂载 DMG 的 bundle 校验（项数以脚本为准） |
 | `make test-virtual-display` | 虚拟显示器集成 harness（6 例）。**会短暂切换真实显示排列**，有活动用户会话时勿跑 |
 | `make test-freerdp-sdk-selection` / `test-freerdp-no-pipe2` | 守护 macOS 26/27 SDK 选择与 `WINPR_HAVE_PIPE2=OFF` 构建配置 |
@@ -111,7 +111,7 @@ make build       # bin/rdp-worker、bin/rdp-probe、bin/rdpctl
 make check       # Go race + C/AVC harness + vet
 make agent-build && make agent-check
 make agent-app   # bin/RDPAgent.app（TCC 身份）
-make app-dmg     # 可选：dist/RDPServer.app + dist/RDPServer-0.2.2.dmg
+make app-dmg     # 可选：dist/RDPServer.app + dist/RDPServer-0.2.3.dmg
 make test-app-bundle   # 可选：发布前 bundle 校验
 ```
 
@@ -178,6 +178,7 @@ JSON 单对象，**未知字段被拒绝**（`DisallowUnknownFields`）；文件
 | `RDP_AGENT_STUCK_MODIFIER_GUARD` | Agent | 开，`"0"` 关（保守释放卡住修饰键） |
 | `RDP_AGENT_CLIPBOARD_STAGING` / `RDP_AGENT_NO_PERMISSION_REQUEST` | Agent | 关 / 未设 |
 | `RDP_AGENT_INPUT_TRACE` / `RDP_AGENT_EVENT_TAP` | Agent 诊断 | 关（采样后删除含键码日志） |
+| `RDP_WORKER_MANAGED_BY_APP` | Worker（App 形态内部） | App 设 `1`；父进程变成 PID 1（App 崩溃/SIGKILL）时记录 `event=worker_parent_exited` 并退出；手工/launchd 形态不设，生命周期不变 |
 | `RDP_WORKER_BACKTRACE` / `RDP_DISP_DEBUG` / `RDP_INPUT_TRACE` | Worker 诊断 | 关 |
 | `RDP_TRANSPORT_DUMP` / `WLOG_LEVEL` | Worker 诊断 | 关：dump 含会话流量，仅隔离测试短时使用 |
 | `RDPSERVER_DATA_DIR` / `RDPSERVER_HELPERS_DIR` / `RDPSERVER_SELFTEST_START` | App | 数据目录 / helper 目录 / 自检开关 |
@@ -246,6 +247,8 @@ JSON 单对象，**未知字段被拒绝**（`DisallowUnknownFields`）；文件
 | 症状 | 可能原因 | 做法 |
 | --- | --- | --- |
 | Worker 在跑但 live 会话被拒（`reason=no_frame`），日志无 `event=agent_ipc_listening` | 上次崩溃/被杀残留 socket，C 侧静默放弃监听 | 确认 Worker 已退出后 `rm -f` 旧 socket 再启动 |
+| App 被 SIGKILL/崩溃后 `rdp-worker` 仍在监听 | 旧版本没有父进程看门狗；或手工/launchd 形态本就不带 `RDP_WORKER_MANAGED_BY_APP` | 当前 App 形态的 Worker 会在 `getppid()==1` 后记录 `event=worker_parent_exited` 并退出（`address:auto` 先停子进程）；残留进程按 PID/配置路径确认后清理，不要盲杀 |
+| `address:auto` 子进程重启后 Agent 连不上（`reason=no_frame`） | 上一个子进程崩溃/被 SIGTERM 后 socket 仍在，C listener 静默放弃 | 当前 supervisor 在每次启动子进程前 unlink socket；确认版本并查 `event=lan_socket_remove_failed` |
 | Worker 启动即退出（`Agent IPC socket requires an absolute path in an owned private directory`） | socket 路径非绝对、≥104 字节，或父目录非当前 UID/0700 | 用私有目录的绝对短路径 |
 | 有画面但帧不更新 / 新 Agent 无帧 | generation/frameID 被判 stale | generation 非递减、同 generation 内 frameID 递增；重启 Agent 时取更大 generation |
 | Agent 采集不到帧 | 显示器休眠/离线（SCK 返回空 displays，Agent 报 `display index is not available` 后退出）、屏幕录制未授权、SCStream queueDepth=1 | 唤醒显示器后重启 Agent（LaunchAgent 形态用 kickstart）；用 app 身份查权限；queueDepth 2..8 |

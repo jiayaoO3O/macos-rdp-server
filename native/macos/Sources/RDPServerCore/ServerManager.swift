@@ -21,7 +21,12 @@ import Darwin
 public final class ServerManager: @unchecked Sendable {
     public static let readinessTimeout: Double = 10
     public static let agentStopGrace: Double = 5
-    public static let workerStopGrace: Double = 5
+    /// Must match `stopChild` in cmd/rdp-worker/main.go: the address:auto
+    /// supervisor waits this long for its FreeRDP child before SIGKILL.
+    public static let lanSupervisorStopGrace: Double = 5
+    // Keep the App's grace longer than the supervisor's child-shutdown window
+    // so escalation to SIGKILL does not orphan that child.
+    public static let workerStopGrace: Double = 10
     public static let agentRestartLimit = 3
     public static let agentRestartWindow: Double = 30
     public static let logRotationBytes: UInt64 = 32 << 20
@@ -110,8 +115,11 @@ public final class ServerManager: @unchecked Sendable {
         let worker = workerProcess
         let agent = agentProcess
         stateLock.unlock()
-        if let agent { agent.terminate(graceSeconds: 1) }
-        if let worker { worker.terminate(graceSeconds: 1) }
+        if let agent { agent.terminate(graceSeconds: Self.agentStopGrace) }
+        if let worker {
+            worker.terminate(graceSeconds: Self.workerStopGrace)
+            paths.removeWorkerLease()
+        }
         paths.removeAgentSocket()
     }
 
@@ -204,6 +212,19 @@ public final class ServerManager: @unchecked Sendable {
             throw ServerError.notReady("service is stopping")
         }
 
+        // A previous App crash can leave a Worker (and its address:auto child)
+        // on the same port/socket. Stop it before spawning a replacement. The
+        // lease covers this version; the command-line scan also covers Workers
+        // started before leases existed.
+        let cleanup = StaleWorkerCleanup.run(
+            leaseURL: paths.workerLeaseFile,
+            configPath: paths.configFile.path,
+            graceSeconds: Self.workerStopGrace,
+            logger: { [appLog] line in appLog.append(line) })
+        if !cleanup.succeeded {
+            throw failStaleWorker("a previous Worker is still running (\(cleanup.remaining.count) process(es))")
+        }
+
         // Reload the configuration from disk so external edits are honoured.
         var config: ServerConfiguration
         do {
@@ -251,16 +272,21 @@ public final class ServerManager: @unchecked Sendable {
         workerTail.seekToEnd()
         let worker: ChildProcess
         do {
+            var environment = helpers.baseEnvironment
+            // The Worker exits (and stops its address:auto FreeRDP child) when
+            // this App disappears, including an App crash or SIGKILL.
+            environment["RDP_WORKER_MANAGED_BY_APP"] = "1"
             worker = try ChildProcess(
                 executable: helpers.workerExecutable,
                 arguments: ["-config", paths.configFile.path,
                             "-agent-socket", paths.agentSocket.path],
-                environment: helpers.baseEnvironment,
+                environment: environment,
                 logURL: paths.workerLog,
                 onExit: { [weak self] in self?.scheduleProcessPoll() })
         } catch {
             throw failStart("\(error)")
         }
+        writeWorkerLease(worker)
         setWorkerTail(workerTail)
 
         stateLock.lock()
@@ -286,8 +312,11 @@ public final class ServerManager: @unchecked Sendable {
             workerListening = true
             stateLock.unlock()
         case .failed(let message):
-            worker.terminate(graceSeconds: 2)
+            // The supervised child may still be shutting down; give the
+            // supervisor its full window before escalating to SIGKILL.
+            worker.terminate(graceSeconds: Self.workerStopGrace)
             paths.removeAgentSocket()
+            paths.removeWorkerLease()
             stateLock.lock()
             workerProcess = nil
             workerListening = false
@@ -365,6 +394,7 @@ public final class ServerManager: @unchecked Sendable {
             appLog.append("event=worker_stopped status=\(worker.terminationStatus ?? -1)")
         }
         paths.removeAgentSocket()
+        paths.removeWorkerLease()
 
         stateLock.lock()
         workerProcess = nil
@@ -586,6 +616,22 @@ public final class ServerManager: @unchecked Sendable {
         "MACRDP\\" + account
     }
 
+    // MARK: - Worker identity / cleanup
+
+    /// Records the Worker identity for the next start after a crash/SIGKILL.
+    private func writeWorkerLease(_ worker: ChildProcess) {
+        guard let lease = WorkerLease.capture(pid: worker.pid) else {
+            appLog.append("event=worker_lease_failed pid=\(worker.pid) reason=identity")
+            return
+        }
+        do {
+            try lease.write(to: paths.workerLeaseFile)
+            appLog.append("event=worker_lease_written pid=\(worker.pid)")
+        } catch {
+            appLog.append("event=worker_lease_failed pid=\(worker.pid) reason=write")
+        }
+    }
+
     // MARK: - Agent supervision
 
     private func spawnAgent(config: ServerConfiguration) throws {
@@ -735,9 +781,12 @@ public final class ServerManager: @unchecked Sendable {
         stateLock.unlock()
 
         if let agent {
-            agent.terminate(graceSeconds: 2)
+            // Give the Agent its full window to restore the display layout
+            // before escalating to SIGKILL.
+            agent.terminate(graceSeconds: Self.agentStopGrace)
         }
         paths.removeAgentSocket()
+        paths.removeWorkerLease()
         let status = worker.terminationStatus.map(String.init) ?? "unknown"
         let tail = LogTail.tailLines(of: paths.workerLog, limit: 12)
             .filter { $0.contains("event=") }
@@ -928,6 +977,16 @@ public final class ServerManager: @unchecked Sendable {
         stateLock.unlock()
         appLog.append("event=service_start_rejected")
         return .invalidConfiguration(message)
+    }
+
+    private func failStaleWorker(_ message: String) -> ServerError {
+        stateLock.lock()
+        serviceState = .error
+        lastError = message
+        appliedConfiguration = nil
+        stateLock.unlock()
+        appLog.append("event=stale_worker_cleanup_failed")
+        return .workerFailed(message)
     }
 
     // MARK: - Helpers

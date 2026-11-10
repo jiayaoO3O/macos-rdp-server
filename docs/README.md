@@ -53,6 +53,7 @@
 | --- | --- |
 | [VERIFICATION-2026-11-08-final-acceptance.md](VERIFICATION-2026-11-08-final-acceptance.md) | 真实 Windows 11 客户端（mstsc）最终验收记录 |
 | [VERIFICATION-2026-11-09-macos26-sdk-build.md](VERIFICATION-2026-11-09-macos26-sdk-build.md) | macOS 26 SDK / WinPR pipe2 构建验证 |
+| [VERIFICATION-2026-11-10-orphan-process-cleanup.md](VERIFICATION-2026-11-10-orphan-process-cleanup.md) | Worker 父进程看门狗、终止宽限与 `address:auto` stale socket 清理 |
 
 ### 阶段验收（docs/validation/，早期历史）
 

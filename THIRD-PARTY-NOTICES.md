@@ -1,6 +1,6 @@
 # 第三方组件与许可证声明（THIRD-PARTY-NOTICES）
 
-> 适用产物：发布用 DMG / App（`make app-dmg` 生成 `dist/RDPServer-0.2.2.dmg` 与 `dist/RDPServer.app`）。
+> 适用产物：发布用 DMG / App（`make app-dmg` 生成 `dist/RDPServer-0.2.3.dmg` 与 `dist/RDPServer.app`）。
 > 打包脚本会把根 `LICENSE` / `NOTICE` / 本文件复制到 `Contents/Resources/Licenses/`（见 §4 第 4 条）。
 > `dist/` 是本地构建产物（已 gitignore、不入库），发布前请重新执行 `make app-dmg`，确保包内实际携带这些文件。
 > 本文件与根目录 [LICENSE](LICENSE)（Apache License 2.0 全文）、[NOTICE](NOTICE) 配套使用。
@@ -230,9 +230,9 @@ limitations under the License.
    源文件缺失或为空时构建直接失败（`missing license file ...` / `empty license file ...`），
    不会产出不合规包。`scripts/test-app-bundle.py` 的 `check_licenses()` 校验该目录存在、
    三份文件非空且含预期标记。
-   **注意**：现有 `dist/RDPServer-0.2.2.dmg` / `dist/RDPServer.app` 是加入该逻辑**之前**的构建，
-   需重新 `make app-dmg` 后才实际携带；若本机在服务真实 RDP 会话，不要随意重建/覆盖部署产物。
-   验证命令见 §5。
+   **注意**：0.2.2 及更早的 `dist/RDPServer-0.2.2.dmg` 是加入该逻辑**之前**的构建；
+   0.2.3 起每次 `make app-dmg` 都会把许可证复制进 bundle。若本机在服务真实 RDP 会话，
+   不要随意重建/覆盖部署产物。验证命令见 §5。
 5. **版本未固定风险**：OpenSSL 与 json-c 来自构建机 Homebrew，仓库未固定版本；升级后需重新核对
    许可证与版本并更新本表。FreeRDP 版本与归档 SHA-256 已固定，可直接复现。
 6. **未发现 copyleft 组件**：当前 DMG 内 7 个 dylib 均为 Apache-2.0 或 MIT；对 FreeRDP 的

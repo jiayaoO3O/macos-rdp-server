@@ -10,6 +10,7 @@ import Darwin
 ///     <data>/key.pem, cert.pem      self-signed TLS material (0600)
 ///     <data>/certificate-addresses  SAN bookkeeping for certificate regeneration
 ///     <data>/agent.sock             Worker <-> Agent Unix socket (0600)
+///     <data>/worker.lease           identity of the worker this app spawned (0600)
 ///     <data>/agent-generation       monotonically increasing Agent generation
 ///     <data>/logs/worker.log        Worker stdout/stderr
 ///     <data>/logs/agent.log         Agent stdout/stderr
@@ -30,6 +31,7 @@ public struct ServerPaths: Sendable, Equatable {
     public var certificateFile: URL { dataDirectory.appendingPathComponent("cert.pem") }
     public var certificateAddressesFile: URL { dataDirectory.appendingPathComponent("certificate-addresses") }
     public var agentSocket: URL { dataDirectory.appendingPathComponent("agent.sock") }
+    public var workerLeaseFile: URL { dataDirectory.appendingPathComponent("worker.lease") }
     public var generationFile: URL { dataDirectory.appendingPathComponent("agent-generation") }
     public var logsDirectory: URL { dataDirectory.appendingPathComponent("logs", isDirectory: true) }
     public var workerLog: URL { logsDirectory.appendingPathComponent("worker.log") }
@@ -133,6 +135,10 @@ public struct ServerPaths: Sendable, Equatable {
     /// and after every stop.
     public func removeAgentSocket() {
         unlink(agentSocket.path)
+    }
+
+    public func removeWorkerLease() {
+        unlink(workerLeaseFile.path)
     }
 
     public var socketExists: Bool { SecureFile.exists(agentSocket) }

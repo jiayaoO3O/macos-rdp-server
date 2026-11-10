@@ -40,6 +40,9 @@ func main() {
 	if c.AutoLAN {
 		log.Printf("event=lan_address_selected interface=%s address=%s", c.LANInterface, c.Address)
 	}
+	if appManagedWorker() {
+		go watchStandaloneParent()
+	}
 	if err = runWorker(c, agentSocketPath, backend); err != nil {
 		log.Fatal(err)
 	}
@@ -52,11 +55,32 @@ func runWorker(c config.Config, agentSocketPath, backend string) error {
 		c.Account, c.Enabled, c.TestPattern, c.Clipboard)
 }
 
+const (
+	managedByAppEnv           = "RDP_WORKER_MANAGED_BY_APP"
+	managedParentPollInterval = 500 * time.Millisecond
+)
+
+func appManagedWorker() bool { return os.Getenv(managedByAppEnv) == "1" }
+
 // superviseLAN restarts the FreeRDP child when the selected private LAN IPv4
 // changes, while keeping the listener bound only to that exact private address.
 func superviseLAN(configPath, agentSocket string) error {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	socketPath, err := filepath.Abs(agentSocket)
+	if err != nil {
+		return err
+	}
+	// Every exit path stops the child first (or never started one); removing
+	// the socket here also covers a parent death during the restart delay.
+	defer func() { _ = os.Remove(socketPath) }()
+	signalCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	// Keep signal handling installed while the parent watchdog cancels ctx;
+	// otherwise a concurrent SIGTERM could skip stopping the child.
+	ctx, cancel := context.WithCancel(signalCtx)
+	defer cancel()
+	if appManagedWorker() {
+		go watchSupervisorParent(ctx, cancel)
+	}
 	executable, err := os.Executable()
 	if err != nil {
 		return err
@@ -73,7 +97,13 @@ func superviseLAN(configPath, agentSocket string) error {
 		if c.LANInterface != "" {
 			log.Printf("event=lan_address_selected interface=%s address=%s", c.LANInterface, c.Address)
 		}
-		cmd := exec.Command(executable, "-config", configPath, "-agent-socket", agentSocket)
+		// The previous child never unlinks its socket on crash or SIGTERM.
+		// Without this the C listener silently refuses to listen on the
+		// existing path, so remove it before every child start.
+		if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("event=lan_socket_remove_failed error=%v", err)
+		}
+		cmd := exec.Command(executable, "-config", configPath, "-agent-socket", socketPath)
 		cmd.Env = childEnvironment(c.Address)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
@@ -157,5 +187,41 @@ func sleepContext(ctx context.Context, duration time.Duration) bool {
 		return true
 	case <-ctx.Done():
 		return false
+	}
+}
+
+// watchSupervisorParent stops the LAN supervisor when the App that spawned it
+// disappears. macOS reparents orphaned children to launchd (PID 1); without
+// this the supervisor and its FreeRDP child keep listening after an App crash
+// or SIGKILL. The watchdog is opt-in so manual and launchd deployments keep
+// their existing lifetime.
+func watchSupervisorParent(ctx context.Context, cancel context.CancelFunc) {
+	ticker := time.NewTicker(managedParentPollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if os.Getppid() == 1 {
+				log.Printf("event=worker_parent_exited")
+				cancel()
+				return
+			}
+		}
+	}
+}
+
+// watchStandaloneParent does the same for a Worker that is not running under
+// the LAN supervisor. The C listener has no graceful shutdown, so exiting here
+// leaves only a stale socket, which the App removes before the next start.
+func watchStandaloneParent() {
+	ticker := time.NewTicker(managedParentPollInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		if os.Getppid() == 1 {
+			log.Printf("event=worker_parent_exited")
+			os.Exit(0)
+		}
 	}
 }

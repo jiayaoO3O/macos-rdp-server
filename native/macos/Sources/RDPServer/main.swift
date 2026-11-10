@@ -92,7 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         // Best effort only: the normal quit path already awaited shutdown().
-        // Children that outlive us are cleaned up by the core on next launch.
+        // A Worker that outlives a crash/SIGKILL notices through
+        // RDP_WORKER_MANAGED_BY_APP and exits without becoming an orphan.
     }
 
     /// Terminal dev runs: a bare SIGTERM/SIGINT would orphan worker/agent

@@ -69,7 +69,7 @@ public struct SelfTestReport: Codable, Sendable {
 ///     worker.*       optional: Worker starts and listens (startService)
 ///     agent.frames   optional: Agent frames flow; skipped (ok) when the
 ///                    Screen Recording / Accessibility permissions are missing
-///     cleanup.*      optional: no leftover children / socket after stop
+///     cleanup.*      grace invariant; optional: no leftover children / socket after stop
 public enum SelfTest {
     public static func run(dataDirectory: URL? = nil,
                            helpersDirectory: URL? = nil,
@@ -193,10 +193,55 @@ public enum SelfTest {
                                                      environment: helpers.baseEnvironment)
         add("agent.permission_query", permissionQuery.isAvailable,
             permissionQuery.lastError ?? permissionQuery.summary)
+        add("cleanup.worker_grace_exceeds_supervisor_grace",
+            ServerManager.workerStopGrace > ServerManager.lanSupervisorStopGrace,
+            "worker \(ServerManager.workerStopGrace)s > supervisor \(ServerManager.lanSupervisorStopGrace)s")
         if startService {
             do {
                 let manager = try ServerManager(dataDirectory: paths.dataDirectory,
                                                 helpersDirectory: helpers.helpersDirectory)
+
+                // Simulate a Worker left behind by an App crash/SIGKILL. The
+                // real start path must stop it before spawning its own Worker.
+                paths.removeAgentSocket()
+                let stale = try? ChildProcess(
+                    executable: helpers.workerExecutable,
+                    arguments: ["-config", paths.configFile.path,
+                                "-agent-socket", paths.agentSocket.path],
+                    environment: helpers.baseEnvironment,
+                    logURL: paths.workerLog)
+                defer { stale?.terminate(graceSeconds: 2) }
+                var staleReady = false
+                if let stale {
+                    let deadline = Date().addingTimeInterval(10)
+                    while Date() < deadline {
+                        if tcpConnectable(address: "127.0.0.1:\(configuration.port)") {
+                            staleReady = true
+                            break
+                        }
+                        if !stale.isRunning { break }
+                        usleep(100_000)
+                    }
+                }
+                add("cleanup.stale_worker_seeded", staleReady,
+                    stale.map { "pid \($0.pid)" } ?? "could not start a stale Worker")
+                if let stale, staleReady, let lease = WorkerLease.capture(pid: stale.pid) {
+                    let written = (try? lease.write(to: paths.workerLeaseFile)) != nil
+                    add("cleanup.stale_worker_lease",
+                        written && WorkerLease.read(from: paths.workerLeaseFile) == lease,
+                        "pid \(stale.pid)")
+                } else {
+                    add("cleanup.stale_worker_lease", false, "no stale Worker identity")
+                }
+                if let stale, staleReady {
+                    let scanned = StaleWorkerCleanup.scan(configPath: paths.configFile.path) ?? []
+                    add("cleanup.stale_worker_scan",
+                        scanned.contains { $0.pid == stale.pid },
+                        "pid \(stale.pid)")
+                } else {
+                    add("cleanup.stale_worker_scan", false, "no stale Worker for the scan")
+                }
+
                 do {
                     let started = try manager.startNow(timeout: 25)
                     add("worker.started", started.state == .running, started.state.rawValue)
@@ -236,6 +281,12 @@ public enum SelfTest {
                     add("worker.start", false, "\(error)")
                     _ = manager.stopNow()
                 }
+                add("cleanup.stale_worker_removed", stale.map { !$0.isRunning } ?? false,
+                    stale.map { "pid \($0.pid)" } ?? "no stale Worker")
+                let appLogText = (try? SecureFile.readString(at: paths.appLog, maxBytes: 1 << 20)) ?? ""
+                add("cleanup.stale_worker_lease_source",
+                    appLogText.contains("event=stale_worker_detected source=lease"),
+                    "startup cleanup did not use the worker lease")
                 manager.shutdownNow()
             } catch {
                 add("worker.manager", false, "\(error)")

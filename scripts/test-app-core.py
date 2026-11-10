@@ -262,6 +262,7 @@ def test_self_test(executable, workdir, helpers):
         "config.written", "config.mode", "config.loadable", "config.loopback",
         "config.absolute_paths", "config.no_secrets",
         "agent.permission_query",
+        "cleanup.worker_grace_exceeds_supervisor_grace",
         "secrets.no_plaintext_password", "secrets.hash_only_in_sam",
         "paths.files_private",
     ]
@@ -343,6 +344,10 @@ def test_self_test_with_service(executable, workdir, helpers):
     require_equal(report["started_service"], True, "self-test.started_service")
     checks = check_map(report)
     for name in ["worker.started", "worker.listening", "worker.tcp_connect",
+                 "cleanup.worker_grace_exceeds_supervisor_grace",
+                 "cleanup.stale_worker_seeded", "cleanup.stale_worker_lease",
+                 "cleanup.stale_worker_scan", "cleanup.stale_worker_removed",
+                 "cleanup.stale_worker_lease_source",
                  "cleanup.state", "cleanup.no_running_pids", "cleanup.socket_removed"]:
         require(name in checks, "lifecycle self-test is missing check %r" % name)
         require(checks[name]["ok"], "lifecycle check failed: %s (%s)"
@@ -360,7 +365,7 @@ def test_version_and_help(executable, workdir, helpers):
     environment = child_environment(workdir, helpers)
     completed = run_cli(executable, ["--version"], environment, timeout=30)
     require_equal(completed.returncode, 0, "--version exit code")
-    require("0.2.2" in completed.stdout, "--version output: %r" % completed.stdout)
+    require("0.2.3" in completed.stdout, "--version output: %r" % completed.stdout)
     completed = run_cli(executable, ["--help"], environment, timeout=30)
     require_equal(completed.returncode, 0, "--help exit code")
     require("--self-test" in completed.stdout, "--help output is missing --self-test")

@@ -41,7 +41,7 @@ APP_NAME = "RDPServer.app"
 APP_EXECUTABLE = "RDPServer"
 BUNDLE_ID = "com.rdp-server.server"
 DISPLAY_NAME = "RDP Server"
-VERSION = "0.2.2"
+VERSION = "0.2.3"
 BUILD_NUMBER = "1"
 MINIMUM_SYSTEM_VERSION = "14.0"
 # Every bundled Mach-O must be loadable on macOS 26; the dev machine runs a
