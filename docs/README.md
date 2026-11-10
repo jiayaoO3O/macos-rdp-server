@@ -8,13 +8,13 @@
 | --- | --- | --- |
 | [../README.md](../README.md) | 项目入口 | 面向人类：目标、构建、运行、测试与客户端验证 |
 | [../AGENTS.md](../AGENTS.md) | **唯一 AI 代理入口** | 项目纪律、契约、命令、常见陷阱（开工前必读） |
-| [../PLAN.md](../PLAN.md) | 范围与路线 | 产品边界、阶段目标与后续路线 |
+| [../PLAN.md](../PLAN.md) | 历史规划 | 早期方案记录；不是当前实现说明或任务清单 |
 | [STATUS-2026-11-08.md](STATUS-2026-11-08.md) | **当前状态权威** | 实现状态、可用范围、测试基线、运行态；状态冲突时以此为准 |
 | [DEPENDENCIES.md](DEPENDENCIES.md) | 依赖与版本 | 版本矩阵、构建顺序、第三方许可证与可复现性边界 |
 
 ## 命名规范
 
-- 常规文档：`CATEGORY-YYYY-MM-DD[-slug].md`，`CATEGORY` ∈ `DESIGN` / `DIAGNOSIS` / `PERFORMANCE` / `VERIFICATION` / `STATUS`（`HANDOFF` 已停用，见下）。
+- 常规文档：`CATEGORY-YYYY-MM-DD[-slug].md`，`CATEGORY` ∈ `DESIGN` / `DIAGNOSIS` / `PERFORMANCE` / `VERIFICATION` / `STATUS`。不再新增交接类文档；状态写入 STATUS，历史证据写入 VERIFICATION / DIAGNOSIS。
 - 例外：`docs/README.md`、`docs/archive/README.md` 等目录索引文件；`docs/archive/` 保留历史文件名（如 `performance-baseline.md`、`PERFORMANCE-AVC420-IMPLEMENTATION.md`、`RESOLUTION-ADAPTATION-2026-11-07.md`），不强制日期格式。
 - 阶段验收记录放 `docs/validation/`；被取代但仍需追溯的记录放 `docs/archive/`。
 - 改动行为 / 命令 / 范围时，同步更新 `STATUS`、`README`、`AGENTS` 中对应段落；文档之间用相对链接互引。
@@ -65,7 +65,7 @@
 
 > **归档 = 已被取代，仅用于追溯当时的现场、决策与证据。** 其中的命令、路径、二进制 sha256、PID/generation 与“待办”均已过期，**不要按它们操作线上环境**；当前事实以 STATUS + 代码为准。
 
-本仓库不使用 HANDOFF 类交接文档；其中仍有效的结论已并入 README / AGENTS / STATUS / DEPENDENCIES，本索引不再列出或链接它们。
+当前主仓库没有交接类文档。历史目录中的阶段材料仍保留作证据，不应被当作当前任务清单。
 
 | 文档 | 主题 |
 | --- | --- |

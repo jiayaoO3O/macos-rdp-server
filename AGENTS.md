@@ -8,7 +8,7 @@
 
 | 项 | 事实 |
 | --- | --- |
-| 项目 | macOS RDP **服务端原型**（P0）：让已在本机登录的 Mac 用户用 Windows RDP 客户端控制**当前用户桌面** |
+| 项目 | macOS RDP **早期原型**：让已在本机登录的 Mac 用户用 Windows RDP 客户端控制**当前用户桌面** |
 | 语言 | Go 1.27（无第三方 Go 依赖）+ cgo C（FreeRDP/WinPR 3.32.2）+ Swift（SwiftPM tools 5.9）+ Python 3（脚本仅标准库；图标脚本可选 Pillow）+ Makefile |
 | 形态 | 菜单栏 App `RDPServer.app` 自管 worker + 嵌套 Agent（推荐/已验收）；手工 `bin/rdp-worker` + Agent / LaunchAgent 为开发者形态 |
 | 版本 | `0.2.2`（`native/macos/Sources/RDPServerCore/Version.swift`） |
@@ -116,7 +116,7 @@ make test-app-bundle   # 可选：发布前 bundle 校验
 ```
 
 - **`.deps/install` 缺失时 cgo 直接编译失败**；`make build/check/test-*` 不会自动触发 `make deps`。
-- 需要验证新代码但 `bin/` 正在服务真实会话时：`go build -o /tmp/rdp-check/ ./cmd/...`，再设 `RDP_TEST_WORKER_BINARY`/`RDP_TEST_PROBE_BINARY` 跑协议测试；改动另存于独立 worktree 时需先 `ln -s <主仓库>/.deps .deps`。
+- 需要验证新代码但 `bin/` 正在服务真实会话时：将独立构建输出放在系统批准的临时目录（例如 `$TMPDIR/rdp-check/`），再设 `RDP_TEST_WORKER_BINARY`/`RDP_TEST_PROBE_BINARY` 跑协议测试；改动另存于独立 worktree 时需先 `ln -s <主仓库>/.deps .deps`。
 - 依赖重建/证明可复现性的完整命令见 DEPENDENCIES §9（`vtool -show-build` 审计 minos=14.0、`nm -u` 查 `_pipe2`）。
 - **当前没有 CI**：提交前必须按改动范围在本地跑测试（§9），并在回复/PR 中写明跑了什么、什么没跑。
 
@@ -233,7 +233,7 @@ JSON 单对象，**未知字段被拒绝**（`DisallowUnknownFields`）；文件
 
 **日志是事实上的测试 API**：`event=`/`reason=` 被 Python 测试用子串匹配，**只允许追加字段，不要重命名既有事件/原因词**；日志不得包含凭据、剪贴板内容、完整用户路径、屏幕内容。
 
-**Swift**：纯逻辑放 `MacAgentCore`（可测、不依赖 AppKit/SCStream）；平台 API/CLI 放 `rdp-agent/main.swift`。**新增/删除 MacAgentCore 源文件必须同步 `Makefile` 的 `agent-check` 清单（当前 24 个核心源文件 + 6 个测试文件）以及 `scripts/test-agent-ipc-wire.py` 的 `CORE_FILES` 子集**，否则静默漏测或链接失败。`Package.swift` 无 testTarget，测试是 plain precondition 单可执行。共享可变状态用 `NSLock` + `@unchecked Sendable`；socket 写串行化。Agent 接收线程对单条坏消息/未知类型要容错（只记日志、必要时 releaseAll）；socket EOF/不可恢复错误才 `exit(1)` 交给 launchd。**CLT-only 工具链没有 SwiftUI 宏插件**：禁止 `@State`/`@FocusState`/`#Preview`/`@AppStorage` 等宏，用 `ObservableObject`/`@Published`/`@StateObject`/`@Binding` 或 AppKit；不要设 `DEVELOPER_DIR` 绕过。
+**Swift**：纯逻辑放 `MacAgentCore`（可测、不依赖 AppKit/SCStream）；平台 API/CLI 放 `rdp-agent/main.swift`。新增/删除 MacAgentCore 源文件必须同步 `Makefile` 的 `agent-check` 清单以及 `scripts/test-agent-ipc-wire.py` 的 `CORE_FILES` 子集，否则静默漏测或链接失败。`Package.swift` 无 testTarget，测试是 plain precondition 单可执行。共享可变状态用 `NSLock` + `@unchecked Sendable`；socket 写串行化。Agent 接收线程对单条坏消息/未知类型要容错（只记日志、必要时 releaseAll）；socket EOF/不可恢复错误才 `exit(1)` 交给 launchd。**CLT-only 工具链没有 SwiftUI 宏插件**：禁止 `@State`/`@FocusState`/`#Preview`/`@AppStorage` 等宏，用 `ObservableObject`/`@Published`/`@StateObject`/`@Binding` 或 AppKit；不要设 `DEVELOPER_DIR` 绕过。
 
 **Python**：`#!/usr/bin/env python3`、标准库、`unittest` + `argparse`；用 `ROOT = Path(__file__).resolve().parents[1]` 定位仓库根；测试必须隔离（临时目录/随机端口/临时证书/随机密码）并清理；破坏性操作必须显式参数。部分脚本（`test-protocol.py`、`benchmark-fps.py`）硬编码 Apple Silicon Homebrew 的 `/opt/homebrew/opt/openssl@3/bin/openssl`（`dev-init.py` 用 `brew --prefix`，`disp-diagnose.py` 有 `shutil.which` 兜底）；其它环境需改这两个脚本的路径。图标生成脚本 `scripts/generate-app-icon.py` 额外需要 Pillow，属可选开发依赖，不是构建/运行依赖。
 
@@ -305,7 +305,7 @@ JSON 单对象，**未知字段被拒绝**（`DisallowUnknownFields`）；文件
 | [README.md](README.md) | 人类上手：构建、安装 DMG、连接 Windows 客户端 |
 | [docs/STATUS-2026-11-08.md](docs/STATUS-2026-11-08.md) | **当前状态/范围/测试基线/已知限制（权威入口）** |
 | [docs/DEPENDENCIES.md](docs/DEPENDENCIES.md) | 版本矩阵、构建顺序/产物、第三方许可证、可复现性边界 |
-| [PLAN.md](PLAN.md) | 范围与阶段（P0→P3）、边界与调研依据 |
+| [PLAN.md](PLAN.md) | 早期规划记录（已被当前实现取代，不是当前任务清单） |
 | [docs/README.md](docs/README.md) | docs 目录索引（DESIGN/DIAGNOSIS/VERIFICATION/archive） |
 | `docs/DESIGN-*.md` | 实现契约（分辨率/鼠标、文件剪贴板、虚拟显示器、菜单栏 App/UI/打包） |
 | `docs/DIAGNOSIS-*.md` | 现场问题根因与验证（DISP 客户端限制、键盘 Fn、虚拟显示器鼠标偏移） |
@@ -313,7 +313,7 @@ JSON 单对象，**未知字段被拒绝**（`DisallowUnknownFields`）；文件
 | `docs/archive/` | 仅历史追溯（命令、路径、数字均已过期，勿按其中操作） |
 | [native/freerdp/README.md](native/freerdp/README.md) | cgo 所有权/线程/安全约束 |
 
-- **本仓库不使用 HANDOFF 类交接文档**：状态写在 STATUS/README/AGENTS，历史证据写在 VERIFICATION/DIAGNOSIS。
+- **不新增交接类文档**：当前状态以 STATUS 与代码为准，历史证据写入 VERIFICATION/DIAGNOSIS；早期阶段记录保留为历史材料。
 - 文档命名：`docs/CATEGORY-YYYY-MM-DD[-slug].md`，`CATEGORY` ∈ `DESIGN`/`DIAGNOSIS`/`PERFORMANCE`/`VERIFICATION`/`STATUS`；阶段验收在 `docs/validation/`，被取代的记录放 `docs/archive/`。文档是历史证据：**新增而不是重写既有证据**，用相对链接互引。
 - 改动行为/命令/范围时同步更新：STATUS（状态）、对应 DESIGN/VERIFICATION（契约/证据）、README（用户可见步骤）、AGENTS（纪律与陷阱）、DEPENDENCIES（依赖/版本）。
 
@@ -329,7 +329,7 @@ JSON 单对象，**未知字段被拒绝**（`DisallowUnknownFields`）；文件
 
 1. **先读**：本文件 → `docs/STATUS-2026-11-08.md` → 相关 `docs/DESIGN-*`/`DIAGNOSIS-*`；再用 `git log --oneline -20`、`git status` 确认分支与未提交改动。
 2. **只读勘察**：`go version`、`swift --version`、`ls .deps/install`、`pgrep -fl 'RDPServer|rdp-worker|rdp-agent'`；确认是否已有服务在跑、用户在用哪套形态。**不要重启/停止任何正在服务的进程。**
-3. **确认范围**：需求与 `PLAN.md`/`docs/STATUS` 的范围一致；跨范围能力（远程登录、多用户、音频等）先问，不要自行实现。
+3. **确认范围**：需求与 `docs/STATUS` 的范围一致；`PLAN.md` 仅作历史背景。跨范围能力（远程登录、多用户、音频等）先问，不要自行实现。
 4. **隔离实验**：测试用临时目录 + 随机 loopback 端口 + 临时 config/SAM/证书/socket；不要读写真实数据目录，不要复用真实 socket，不要跑会覆盖 `bin/` 的构建。
 5. **TDD**：bugfix 先写能失败的回归测试（RED）再修；改协议/安全/坐标/剪贴板路径必须补 E2E 断言，并同步 C/Swift/Python 三处实现。
 6. **改完验证**：按改动范围跑 §9 的套件；涉及 UI/打包跑 `make test-app`/`app-dmg && test-app-bundle`；最后跑 `make check`。把“跑了什么/没跑什么/为何”写进报告。
