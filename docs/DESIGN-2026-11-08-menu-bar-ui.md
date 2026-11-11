@@ -137,8 +137,10 @@ RDPServer（本可执行，SwiftUI + AppKit）
   （`.help` 提示“当前 Agent 版本不支持（需 Worker/Agent 成对部署）”，说明文字变橙色），
   并在 `AppModel.releaseStuckKeys()` 里再兜底拒绝。能力探测在 `Task.detached` 里执行
   （首次可能读取 Agent 二进制），随轮询刷新。
-- 菜单栏图标（模板图）：未启用=display 轮廓；启动中/停止中=轮廓+空心点；运行中=轮廓+实心点；
-  错误=display.trianglebadge.exclamationmark。图标的 App 状态颜色由系统自动着色。
+- 菜单栏图标（模板图，`MenuBarIcon` 用 NSBezierPath 以 20×18 pt 矢量重绘 App 图标素材）：宽机身寻呼机
+  轮廓（机身+皮带扣+内嵌屏幕+三个正面按键）。状态编码在**屏幕内**、只用形状：未启用=空屏；
+  启动中/停止中=空心圆；运行中=实心圆；错误=实心圆内挖空感叹号。`isTemplate = true`，由系统按
+  浅色/深色菜单栏自动着色（不使用 emoji：彩色 emoji 不参与模板着色）。
 - SIGINT/SIGTERM（终端开发运行）走优雅 `shutdown()` 后退出，避免遗留 worker/agent 子进程。
 
 ## 6. CLI 契约（无头）
@@ -149,7 +151,7 @@ RDPServer 只负责在返回 nil 时启动 GUI。packaging 的 DMG 验证脚本�
 ```sh
 RDPServer --status   [--data-dir PATH]   # 单个 JSON 对象，stdout；成功报告 exit 0
 RDPServer --self-test[--data-dir PATH]   # 单个 JSON 对象，stdout；全部检查通过 exit 0
-RDPServer --version                      # "RDPServer 0.2.3"，exit 0
+RDPServer --version                      # "RDPServer 0.2.4"，exit 0
 RDPServer --help                         # 用法，exit 0
 # 无上述 flag → 菜单栏 GUI
 ```
@@ -162,7 +164,7 @@ RDPServer --help                         # 用法，exit 0
 - 示例（本机实测，全新临时目录）：
 
 ```json
-{"ok":true,"app_version":"0.2.3","data_directory":"/tmp/x","state":"disabled","configured":false,
+{"ok":true,"app_version":"0.2.4","data_directory":"/tmp/x","state":"disabled","configured":false,
  "enabled":false,"address":null,"listen_host":"127.0.0.1","port":3389,"allow_lan":false,
  "account":null,"principal":null,
  "permissions":{"screen_recording":true,"accessibility":true},

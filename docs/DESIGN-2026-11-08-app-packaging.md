@@ -44,7 +44,7 @@
 | 路径 | 说明 |
 | --- | --- |
 | `dist/RDPServer.app` | 完整 app bundle（见 §3 布局） |
-| `dist/RDPServer-0.2.3.dmg` | drag-install DMG（RDPServer.app + Applications 符号链接）；文件名版本以 `package-app-dmg.py` 的 `VERSION`（当前 0.2.3）为准 |
+| `dist/RDPServer-0.2.4.dmg` | drag-install DMG（RDPServer.app + Applications 符号链接）；文件名版本以 `package-app-dmg.py` 的 `VERSION`（当前 0.2.4）为准 |
 | `dist/build/` | 本次 `go build -o dist/build/ ./cmd/...` 的 Go 产物（rdp-worker、rdpctl 等） |
 | `dist/dmg-staging/` | DMG 暂存目录（RDPServer.app + Applications -> /Applications） |
 
@@ -90,18 +90,18 @@ dist/RDPServer.app/
 | CFBundleIdentifier | com.rdp-server.server | 固定契约 |
 | CFBundleName / CFBundleDisplayName | RDP Server | 菜单栏/关于面板显示名 |
 | CFBundleExecutable | RDPServer | 必须与 Contents/MacOS/RDPServer 同名 |
-| CFBundleShortVersionString | 0.2.3 | 与 DMG 文件名一致（`VERSION` 常量） |
+| CFBundleShortVersionString | 0.2.4 | 与 DMG 文件名一致（`VERSION` 常量） |
 | CFBundleVersion | 1 | |
 | LSMinimumSystemVersion | 14.0 | 与 SwiftPM platforms: [.macOS(.v14)] 一致 |
 | LSUIElement | true | 菜单栏常驻、无 Dock 图标 |
 | NSHighResolutionCapable | true | |
 | CFBundlePackageType | APPL | |
-| CFBundleIconFile | AppIcon | 对应 Contents/Resources/AppIcon.icns（自绘寻呼机图标；由 `scripts/generate-app-icon.py` 生成） |
+| CFBundleIconFile | AppIcon | 对应 Contents/Resources/AppIcon.icns（白色线稿寻呼机素材 `native/macos/Resources/AppIcon-art.png` 合成的深色圆角图标；由 `scripts/generate-app-icon.py` 生成） |
 | LSApplicationCategoryType | public.app-category.utilities | 可选 |
 
 嵌套 RDPAgent.app 由 scripts/package-agent-app.py 生成（打包脚本直接复用 package_agent()）：
 CFBundleIdentifier=com.rdp-server.agent、CFBundleExecutable=rdp-agent、LSUIElement=true、
-CFBundleShortVersionString 与主 app 相同（0.2.3）。
+CFBundleShortVersionString 与主 app 相同（0.2.4）。
 
 **Helper 查找契约**（app-core / app-ui 实现）：
 
@@ -255,8 +255,8 @@ otool -L 检查：11 个 Mach-O（主可执行、2 个 helper、7 个 dylib、�
 dist/dmg-staging/RDPServer.app                  # 从 dist/RDPServer.app 复制
 dist/dmg-staging/Applications -> /Applications  # 绝对符号链接
 hdiutil create -volname "RDP Server" -srcfolder dist/dmg-staging \
-  -fs HFS+ -format UDZO -ov dist/RDPServer-0.2.3.dmg
-hdiutil verify dist/RDPServer-0.2.3.dmg
+  -fs HFS+ -format UDZO -ov dist/RDPServer-0.2.4.dmg
+hdiutil verify dist/RDPServer-0.2.4.dmg
 ```
 
 - 卷名 RDP Server；DMG 内只有 RDPServer.app 与 Applications 符号链接，
@@ -278,7 +278,7 @@ dist/RDPServer-0.2.0.dmg  约 11 MB（历史示例；校验和随源码重建变
 
 行为：
 
-1. 若 dist/RDPServer-0.2.3.dmg（以脚本 `DMG_PATH`/`VERSION` 为准）不存在则先运行 scripts/package-app-dmg.py --swift-build
+1. 若 dist/RDPServer-0.2.4.dmg（以脚本 `DMG_PATH`/`VERSION` 为准）不存在则先运行 scripts/package-app-dmg.py --swift-build
    （--no-build 时直接失败）；
 2. 把 DMG **只读**挂载到 /tmp/rdp-app-bundle-XXXX/mnt（hdiutil attach -nobrowse -readonly，
    若该镜像已被挂载则复用，不 eject 别人的挂载；自己上次残留的挂载会先 detach）；
@@ -293,7 +293,7 @@ dist/RDPServer-0.2.0.dmg  约 11 MB（历史示例；校验和随源码重建变
 | dmg contents | 含 RDPServer.app（真实目录，非符号链接）；Applications -> /Applications 绝对符号链接 |
 | bundle layout | Contents/MacOS/RDPServer、Contents/Helpers/{rdp-worker,rdpctl}、嵌套 agent 可执行存在且可执行；Contents/Frameworks/*.dylib 非空 |
 | license files | Contents/Resources/Licenses/ 下 LICENSE、NOTICE、THIRD-PARTY-NOTICES.md 均存在；与**当前仓库根**同名文件逐字节一致（大小与 sha256；期望值运行时计算，不硬编码）；LICENSE 含 `Apache License`/`Version 2.0`/`END OF TERMS AND CONDITIONS`；NOTICE 含 `FreeRDP`/`OpenSSL`/`json-c`/`Go runtime`；THIRD-PARTY-NOTICES.md 含 `MIT`/`BSD-3-Clause`/`Apache-2.0` 及构建锁定的 FreeRDP 版本；输出各文件字节数与 sha256 前缀 |
-| app Info.plist | id/name/executable/version(0.2.3)/build(1)/LSMinimumSystemVersion(14.0)/LSUIElement/NSHighResolutionCapable/CFBundleIconFile 全部符合契约 |
+| app Info.plist | id/name/executable/version(0.2.4)/build(1)/LSMinimumSystemVersion(14.0)/LSUIElement/NSHighResolutionCapable/CFBundleIconFile 全部符合契约 |
 | nested agent Info.plist | id com.rdp-server.agent、executable rdp-agent、LSUIElement=true、有版本号 |
 | codesign | codesign --verify --deep --strict 通过；外层 Signature=adhoc 且 Identifier=com.rdp-server.server；嵌套验证通过且 Identifier=com.rdp-server.agent |
 | dylib relocation | 遍历 app 内全部 Mach-O：非系统依赖必须是 @rpath/<basename> 且存在于 Contents/Frameworks；dylib 的 install id 必须是 @rpath/...；不允许 /.deps/、仓库路径、/opt/homebrew、/Library/Developer 的 rpath；有非系统依赖的可执行必须有 @executable_path/../Frameworks |
@@ -323,7 +323,7 @@ dist/RDPServer-0.2.0.dmg  约 11 MB（历史示例；校验和随源码重建变
 
 ### 8.1 历史构建输出示例（2026-11-08 20:38，0.2.0 时代；项数/版本以脚本为准）
 
-> 下面是历史输出，当时还没有 `license files` 检查项、版本为 0.2.0；当前输出会多一行 `OK license files (...)`，版本为 0.2.3，且项数以脚本实际运行为准。
+> 下面是历史输出，当时还没有 `license files` 检查项、版本为 0.2.0；当前输出会多一行 `OK license files (...)`，版本为 0.2.4，且项数以脚本实际运行为准。
 
 ```sh
 $ make app-dmg
@@ -395,7 +395,7 @@ $ RDPServer --self-test --data-dir <temp>      # stdout 一个 JSON；checks 项
 ### 9.1 安装
 
 ```sh
-open dist/RDPServer-0.2.3.dmg        # 或在 Finder 双击（文件名以脚本 VERSION 为准）
+open dist/RDPServer-0.2.4.dmg        # 或在 Finder 双击（文件名以脚本 VERSION 为准）
 # 把 RDPServer.app 拖到 Applications；或：
 cp -R "/Volumes/RDP Server/RDPServer.app" /Applications/
 hdiutil detach "/Volumes/RDP Server"  # 可省略
@@ -443,7 +443,7 @@ rm -rf ~/Library/Application\ Support/RDPServer
 2. **每次重建 cdhash 变化 -> 可能需要重新授权 TCC**（ad-hoc 固有限制）。
 3. **app CLI 已落地并验证**（--status/--self-test，自检项数以实际输出为准）；app-core/app-ui 仍在
    迭代菜单栏 UI，若新增 helper 或改变行为需复跑 `make app-dmg && make test-app-bundle`。
-4. **App 图标**：已随包 `Contents/Resources/AppIcon.icns`（自绘寻呼机图标，`scripts/generate-app-icon.py` 生成）并设置 `CFBundleIconFile=AppIcon`；调整图标需重新运行生成脚本或更新 `native/macos/Resources/AppIcon.icns` 后重新打包。菜单栏状态字形仍为系统 emoji 📟（运行期渲染，不随包分发位图）。
+4. **App 图标**：已随包 `Contents/Resources/AppIcon.icns`（白色线稿寻呼机素材 `native/macos/Resources/AppIcon-art.png` 合成的深色圆角图标，`scripts/generate-app-icon.py` 生成）并设置 `CFBundleIconFile=AppIcon`；调整图标需替换素材后重新运行生成脚本或更新 `native/macos/Resources/AppIcon.icns` 再打包。菜单栏状态图标另由代码矢量重绘同一寻呼机造型（模板图，2026-11-10 起不再使用 emoji 📟，不随包分发位图）。
 5. **无自动启动/开机自启/升级/卸载**：没有 LaunchDaemon/登录项，没有版本迁移逻辑；
    卸载靠手工删除（§9.3）。
 6. **仅 arm64（Apple Silicon）**：与项目硬件边界一致；未做 universal2 / x86_64。
@@ -472,7 +472,7 @@ rm -rf ~/Library/Application\ Support/RDPServer
 
 - 布局/依赖/签名变化时更新本文档与脚本注释；
 - 版本号：改 VERSION/BUILD_NUMBER（scripts/package-app-dmg.py）时同步 DMG 文件名、
-  验证脚本常量（EXPECTED_VERSION）与本文档；当前 `VERSION=0.2.3`；
+  验证脚本常量（EXPECTED_VERSION）与本文档；当前 `VERSION=0.2.4`；
 - 许可证：`license files`（`LICENSE`/`NOTICE`/`THIRD-PARTY-NOTICES.md`）由打包脚本自动复制并由验证脚本检查；新增/修改第三方依赖或许可证文本时同步 `THIRD-PARTY-NOTICES.md`、`NOTICE` 与 DEPENDENCIES §8，再跑 `make app-dmg && make test-app-bundle`；
 - 新增 helper 时同步 HELPER_NAMES、验证脚本清单与 app 侧查找逻辑。
 

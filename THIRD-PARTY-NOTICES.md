@@ -1,6 +1,6 @@
 # 第三方组件与许可证声明（THIRD-PARTY-NOTICES）
 
-> 适用产物：发布用 DMG / App（`make app-dmg` 生成 `dist/RDPServer-0.2.3.dmg` 与 `dist/RDPServer.app`）。
+> 适用产物：发布用 DMG / App（`make app-dmg` 生成 `dist/RDPServer-0.2.4.dmg` 与 `dist/RDPServer.app`）。
 > 打包脚本会把根 `LICENSE` / `NOTICE` / 本文件复制到 `Contents/Resources/Licenses/`（见 §4 第 4 条）。
 > `dist/` 是本地构建产物（已 gitignore、不入库），发布前请重新执行 `make app-dmg`，确保包内实际携带这些文件。
 > 本文件与根目录 [LICENSE](LICENSE)（Apache License 2.0 全文）、[NOTICE](NOTICE) 配套使用。

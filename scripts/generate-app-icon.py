@@ -1,25 +1,26 @@
 #!/usr/bin/env python3
-"""Generate the RDPServer app icon as original, geometric artwork.
+"""Generate the RDPServer app icon from the white line-art pager artwork.
 
-The published icon must not contain Apple Color Emoji artwork (the previous
-AppIcon.icns was a raster of the ``📟`` emoji and could not be redistributed),
-so this script draws a pager-inspired mark from scratch with Pillow primitives:
-a dark rounded pager body with a belt clip, a light LCD-style screen with three
-abstract message lines, one wide button and two round status buttons. No emoji,
-no bitmap assets, no font files, no external art.
+The artwork lives at ``native/macos/Resources/AppIcon-art.png`` (transparent
+background, white strokes). This script trims its transparent margins,
+composites it onto a dark rounded-square macOS tile with a subtle gradient,
+and renders every iconset representation with LANCZOS downsampling before
+packing the ``.icns`` with ``iconutil``.
 
-Rendering is deterministic: every representation is drawn at 4x and downsampled
-with LANCZOS, so the same Pillow/iconutil versions produce byte-identical PNGs.
+The artwork is the product's icon source; the tile geometry (margins, corner
+radius, gradient, sheen) is defined here so the icon stays reproducible on any
+machine with the same Pillow/iconutil versions.
 
-Requirements: macOS (for ``iconutil``) and Pillow for the drawing step. Pillow
-is an environment dependency, not a project dependency (all other scripts here
-are standard-library only); when it is missing this script exits with a clear
+Requirements: macOS (for ``iconutil``) and Pillow. Pillow is an environment
+dependency, not a project dependency (all other scripts here are
+standard-library only); when it is missing this script exits with a clear
 message.
 
 Usage:
     python3 scripts/generate-app-icon.py                 # rewrite the tracked .icns
     python3 scripts/generate-app-icon.py --preview /tmp/appicon-preview.png
     python3 scripts/generate-app-icon.py --iconset /tmp/AppIcon.iconset
+    python3 scripts/generate-app-icon.py --art path/to/other-art.png
     python3 scripts/generate-app-icon.py --verify-only
 
 The output path defaults to ``native/macos/Resources/AppIcon.icns`` (resolved
@@ -42,7 +43,7 @@ try:
     from PIL import Image, ImageDraw, ImageFilter
 except ImportError:  # pragma: no cover - exercised only without Pillow
     sys.exit(
-        "error: Pillow is required to draw the icon (stdlib + Pillow only).\n"
+        "error: Pillow is required to compose the icon (stdlib + Pillow only).\n"
         "       Install it in the environment you use to run this script, e.g.\n"
         "         python3 -m pip install Pillow\n"
         "       The project's other scripts do not need Pillow; only this one does."
@@ -50,6 +51,8 @@ except ImportError:  # pragma: no cover - exercised only without Pillow
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / "native" / "macos" / "Resources" / "AppIcon.icns"
+DEFAULT_ART = ROOT / "native" / "macos" / "Resources" / "AppIcon-art.png"
+_art_path = DEFAULT_ART
 
 # iconset entry -> pixel size. Every size 16/32/64/128/256/512/1024 is covered
 # exactly once by the 10 names below; 32/256/512 appear twice by design (1x and
@@ -69,24 +72,16 @@ ICONSET_ENTRIES = (
 ICON_SIZES = tuple(sorted({size for _, size in ICONSET_ENTRIES}))
 SUPERSAMPLE = 4  # 4x rendering + LANCZOS gives clean edges at every size.
 
-# Palette (sRGB). Deep blue tile so the charcoal pager keeps contrast at 16 px.
-TILE_TOP = (37, 78, 176)
-TILE_BOTTOM = (14, 145, 214)
-BODY_TOP = (64, 72, 82)
-BODY_BOTTOM = (24, 29, 35)
-BODY_EDGE = (10, 13, 17, 200)
-SCREEN_TOP = (240, 253, 247)
-SCREEN_BOTTOM = (211, 240, 225)
-SCREEN_EDGE = (11, 26, 34, 150)
-MESSAGE_BAR = (13, 112, 104)
-SEPARATOR = (76, 86, 97)
-PILL_FILL = (9, 13, 17)
-PILL_EDGE = (104, 114, 126)
-BUTTON_RED = (222, 66, 66)
-BUTTON_GREEN = (38, 176, 88)
-BUTTON_RING = (10, 13, 17, 170)
-CLIP_FILL = (30, 36, 43)
-CLIP_HIGHLIGHT = (94, 104, 116, 150)
+# Tile geometry (fractions of the square canvas) and palette (sRGB).
+TILE_TOP = (44, 56, 76)
+TILE_BOTTOM = (9, 13, 19)
+TILE_MARGIN = 0.098
+TILE_RADIUS = 0.225  # fraction of the tile edge
+ART_WIDTH = 0.64  # fraction of the tile width
+ART_VERTICAL_OFFSET = 0.006  # optical centering nudge, fraction of the canvas
+HAIRLINE_ALPHA = 20
+SHEEN_ALPHA = 16
+SHEEN_HEIGHT = 0.40  # fraction of the tile height
 
 
 def _rgba(color, alpha=255):
@@ -115,130 +110,70 @@ def _rounded_box_mask(size: int, box, radius: float) -> Image.Image:
     return mask
 
 
-def _paint_rounded_gradient(canvas: Image.Image, box, radius, top, bottom) -> None:
-    mask = _rounded_box_mask(canvas.width, box, radius)
-    gradient = _vertical_gradient(canvas.width, canvas.height, top, bottom).convert("RGBA")
-    canvas.paste(gradient, (0, 0), mask)
+def _load_art(unit: int):
+    """Trim the artwork's transparent margins and scale it for a ``unit`` canvas."""
+    art = Image.open(_art_path).convert("RGBA")
+    # Ignore the faint (>0, <=8) anti-alias/shadow halo when trimming so the
+    # visible pager — not its soft fringe — defines the composition size.
+    bbox = art.getchannel("A").point(lambda value: 255 if value > 8 else 0).getbbox()
+    if bbox is None:
+        raise RuntimeError(f"artwork has no opaque pixels: {_art_path}")
+    art = art.crop(bbox)
+
+    tile_edge = unit * (1 - TILE_MARGIN * 2)
+    target_width = max(1, round(tile_edge * ART_WIDTH))
+    scale = target_width / art.width
+    target_height = max(1, round(art.height * scale))
+    return art.resize((target_width, target_height), Image.LANCZOS)
 
 
 def render_icon(size: int) -> Image.Image:
-    """Draw one square representation at ``size`` px, antialiased."""
-    scale = SUPERSAMPLE
-    unit = size * scale
+    """Compose one square representation at ``size`` px, antialiased."""
+    unit = size * SUPERSAMPLE
     canvas = Image.new("RGBA", (unit, unit), (0, 0, 0, 0))
 
     def px(fraction: float) -> float:
         return fraction * unit
 
     # --- background tile: rounded square with a soft drop shadow -------------
-    tile_box = (px(0.098), px(0.098), px(0.902), px(0.902))
-    tile_radius = 0.225 * (tile_box[2] - tile_box[0])
+    tile_box = (px(TILE_MARGIN), px(TILE_MARGIN), px(1 - TILE_MARGIN), px(1 - TILE_MARGIN))
+    tile_radius = TILE_RADIUS * (tile_box[2] - tile_box[0])
 
     shadow = Image.new("RGBA", (unit, unit), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).rounded_rectangle(
         (tile_box[0], tile_box[1] + px(0.016), tile_box[2], tile_box[3] + px(0.016)),
         radius=tile_radius,
-        fill=(4, 10, 26, 110),
+        fill=(0, 0, 0, 90),
     )
     shadow = shadow.filter(ImageFilter.GaussianBlur(px(0.018)))
     canvas = Image.alpha_composite(canvas, shadow)
-    _paint_rounded_gradient(canvas, tile_box, tile_radius, TILE_TOP, TILE_BOTTOM)
 
-    # --- pager body ----------------------------------------------------------
-    body_w = px(0.44)
-    body_h = px(0.56)
-    body_cx = px(0.5)
-    body_cy = px(0.525)
-    body_box = (
-        body_cx - body_w / 2,
-        body_cy - body_h / 2,
-        body_cx + body_w / 2,
-        body_cy + body_h / 2,
-    )
-    body_radius = px(0.075)
-    _paint_rounded_gradient(canvas, body_box, body_radius, BODY_TOP, BODY_BOTTOM)
-    draw = ImageDraw.Draw(canvas)
-    draw.rounded_rectangle(
-        body_box, radius=body_radius, outline=BODY_EDGE, width=max(1, round(px(0.003)))
-    )
+    tile_mask = _rounded_box_mask(unit, tile_box, tile_radius)
+    tile = _vertical_gradient(unit, unit, TILE_TOP, TILE_BOTTOM).convert("RGBA")
 
-    # --- belt clip (pager identity cue, still legible at 16 px) --------------
-    clip_w = px(0.30)
-    clip_h = px(0.050)
-    clip_top = body_box[1] - px(0.026)
-    clip_box = (px(0.5) - clip_w / 2, clip_top, px(0.5) + clip_w / 2, clip_top + clip_h)
-    draw.rounded_rectangle(
-        clip_box,
-        radius=px(0.025),
-        fill=_rgba(CLIP_FILL),
-        outline=BODY_EDGE,
+    # faint top sheen, fading out before the middle of the tile
+    sheen_height = max(1, round((tile_box[3] - tile_box[1]) * SHEEN_HEIGHT))
+    sheen_strip = Image.new("RGBA", (1, sheen_height))
+    for y in range(sheen_height):
+        alpha = round(SHEEN_ALPHA * (1 - y / max(sheen_height - 1, 1)))
+        sheen_strip.putpixel((0, y), (255, 255, 255, alpha))
+    tile.alpha_composite(sheen_strip.resize((unit, sheen_height), Image.NEAREST),
+                         (0, round(tile_box[1])))
+    canvas.paste(tile, (0, 0), tile_mask)
+
+    # hairline edge keeps the tile crisp against light and dark desktops
+    ImageDraw.Draw(canvas).rounded_rectangle(
+        tile_box,
+        radius=tile_radius,
+        outline=_rgba((255, 255, 255), HAIRLINE_ALPHA),
         width=max(1, round(px(0.002))),
     )
-    draw.line(
-        (clip_box[0] + px(0.020), clip_box[1] + px(0.012), clip_box[2] - px(0.020), clip_box[1] + px(0.012)),
-        fill=CLIP_HIGHLIGHT,
-        width=max(1, round(px(0.004))),
-    )
 
-    # --- LCD screen ---------------------------------------------------------
-    screen_margin_x = px(0.052)
-    screen_box = (
-        body_box[0] + screen_margin_x,
-        body_box[1] + px(0.045),
-        body_box[2] - screen_margin_x,
-        body_box[1] + px(0.245),
-    )
-    screen_radius = px(0.030)
-    _paint_rounded_gradient(canvas, screen_box, screen_radius, SCREEN_TOP, SCREEN_BOTTOM)
-    draw.rounded_rectangle(
-        screen_box, radius=screen_radius, outline=SCREEN_EDGE, width=max(1, round(px(0.004)))
-    )
-
-    # three abstract message lines (no glyphs, no font files)
-    bar_left = screen_box[0] + px(0.035)
-    bar_top = screen_box[1] + px(0.042)
-    bar_height = px(0.022)
-    bar_gap = px(0.034)
-    screen_width = screen_box[2] - screen_box[0]
-    for index, width_fraction in enumerate((0.62, 0.50, 0.36)):
-        bar_width = (screen_width - px(0.070)) * width_fraction
-        y = bar_top + index * bar_gap
-        draw.rounded_rectangle(
-            (bar_left, y, bar_left + bar_width, y + bar_height),
-            radius=bar_height / 2,
-            fill=_rgba(MESSAGE_BAR),
-        )
-
-    # --- separator + controls ----------------------------------------------
-    separator_y = body_box[1] + px(0.320)
-    draw.line(
-        (body_box[0] + px(0.050), separator_y, body_box[2] - px(0.050), separator_y),
-        fill=_rgba(SEPARATOR, 190),
-        width=max(1, round(px(0.005))),
-    )
-
-    control_cy = body_box[1] + px(0.415)
-    pill_box = (
-        body_box[0] + px(0.055),
-        control_cy - px(0.0375),
-        body_box[0] + px(0.255),
-        control_cy + px(0.0375),
-    )
-    draw.rounded_rectangle(
-        pill_box,
-        radius=px(0.0375),
-        fill=_rgba(PILL_FILL),
-        outline=_rgba(PILL_EDGE, 190),
-        width=max(1, round(px(0.004))),
-    )
-    for cx, color in ((body_box[2] - px(0.124), BUTTON_RED), (body_box[2] - px(0.056), BUTTON_GREEN)):
-        radius = px(0.032)
-        draw.ellipse(
-            (cx - radius, control_cy - radius, cx + radius, control_cy + radius),
-            fill=_rgba(color),
-            outline=_rgba(BUTTON_RING),
-            width=max(1, round(px(0.003))),
-        )
+    # --- white pager artwork, optically centred ------------------------------
+    art = _load_art(unit)
+    art_x = round((unit - art.width) / 2)
+    art_y = round((unit - art.height) / 2 + px(ART_VERTICAL_OFFSET))
+    canvas.alpha_composite(art, (art_x, art_y))
 
     return canvas.resize((size, size), Image.LANCZOS)
 
@@ -319,14 +254,21 @@ def _sha256(path: Path) -> str:
 
 
 def main(argv=None) -> int:
+    global _art_path
     parser = argparse.ArgumentParser(
-        description="Generate the RDPServer app icon (original geometric art, no emoji)."
+        description="Generate the RDPServer app icon from the white pager artwork."
     )
     parser.add_argument(
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT,
         help=f"icns output path (default: {DEFAULT_OUTPUT})",
+    )
+    parser.add_argument(
+        "--art",
+        type=Path,
+        default=None,
+        help=f"white line-art source PNG (default: {DEFAULT_ART})",
     )
     parser.add_argument("--iconset", type=Path, default=None, help="keep the generated .iconset directory here")
     parser.add_argument("--preview", type=Path, default=None, help="also write the 1024 px PNG here")
@@ -338,11 +280,18 @@ def main(argv=None) -> int:
     if shutil.which("iconutil") is None:
         sys.exit("error: iconutil not found in PATH")
 
+    _art_path = DEFAULT_ART if args.art is None else (
+        args.art if args.art.is_absolute() else (ROOT / args.art)
+    )
+
     output = args.output if args.output.is_absolute() else (ROOT / args.output)
     if args.verify_only:
         verify_icns(output)
         print(f"  {output} {output.stat().st_size:,} bytes sha256={_sha256(output)}")
         return 0
+
+    if not _art_path.is_file():
+        sys.exit(f"error: artwork not found: {_art_path}")
 
     iconset_dir = args.iconset
     temporary_iconset = None
@@ -351,7 +300,8 @@ def main(argv=None) -> int:
         iconset_dir = Path(temporary_iconset.name) / "AppIcon.iconset"
     try:
         sizes = ", ".join(str(size) for size in ICON_SIZES)
-        print(f"==> drawing {len(ICON_SIZES)} representations: {sizes} px")
+        print(f"==> composing {len(ICON_SIZES)} representations: {sizes} px")
+        print(f"    artwork: {_art_path}")
         write_iconset(iconset_dir)
         build_icns(output, iconset_dir)
         verify_icns(output)

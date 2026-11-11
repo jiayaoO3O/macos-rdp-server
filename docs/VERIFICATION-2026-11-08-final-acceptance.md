@@ -32,7 +32,7 @@
 | **OpenSSL legacy provider / MD4（macOS 26）** | ✅ 修复（0.2.1） | WinPR `WITH_INTERNAL_MD4/RC4`；`OPENSSL_MODULES=/tmp/nonexistent` 下 `rdpctl hash-stdin` 与 protocol **35 例（含 NLA）** 全绿 |
 | **错误信息可复制** | ✅ 可用 | 错误横幅/凭据错误有「复制」按钮 + 文本可选中；字段/端口错误可选中（真实点击未自动化） |
 | **版本号** | ✅ 0.2.2 | `RDPServer --version`、Info.plist、DMG 文件名同步 |
-| **应用图标 / 菜单栏图标** | ✅ | 当时包内为 📟 图标；现 `AppIcon.icns` 已改为自绘寻呼机（见 STATUS §1），菜单栏状态字形仍为 📟 |
+| **应用图标 / 菜单栏图标** | ✅ | 当时包内为 📟 图标；现 `AppIcon.icns` 为白色线稿寻呼机素材合成的深色图标（见 STATUS §1），菜单栏状态图标当时仍为 📟（2026-11-10 起改为同一造型的矢量模板图，见 STATUS §1） |
 | **崩溃现场诊断（`RDP_WORKER_BACKTRACE=1`）** | ✅ 本地验证 | 对隔离 worker `kill -SEGV` 后输出 `event=worker_crash signal=11 frames=7` + `backtrace_symbols_fd`（含 libwinpr 符号） |
 | **macOS 26 启动 SIGSEGV（本记录当时状态）** | ⚠️ 2026-11-08 未解决；2026-11-09 已解决 | 后续取回的 9 份 macOS 26.5.1 `.ips` 指向 WinPR `winpr_event_init` 调用弱导入 `_pipe2` 空槽；pipe()+fcntl 修复包见 STATUS §1.2，已确认成功 |
 

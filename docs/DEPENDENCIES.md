@@ -31,7 +31,7 @@
 | pkg-config（Homebrew `pkgconf`） | 未固定；本机 3.0.10 | FreeRDP CMake 探测；`internal/worker/avc420_build.go`（`#cgo pkg-config:`）（`#cgo pkg-config:`） | 依赖探测 / AVC420 | 建议必需 | `pkg-config --version` |
 | FreeRDP / WinPR | **3.32.2**（归档 SHA-256 固定） | `scripts/build-freerdp.sh`（`version`/`sha256`） | RDP 协议内核、NLA、图形/输入/剪贴板通道 | 必需 | 见 §4.7 |
 | Python 3 | 下限 3.9（系统 `/usr/bin/python3` = 3.9.6）；构建/测试脚本仅标准库 | `Makefile` 各测试/打包目标的 `python3` 调用；`scripts/*.py` 全部 `#!/usr/bin/env python3` | 构建/测试/打包脚本 | 必需 | `python3 --version`；`ls requirements*.txt`（不存在） |
-| Pillow（仅重生成图标） | 未固定（本机已安装；不是构建/运行依赖） | `scripts/generate-app-icon.py` | 绘制原创 `AppIcon.icns`（§7.3） | **可选（开发）** | `python3 -c 'import PIL; print(PIL.__version__)'` |
+| Pillow（仅重生成图标） | 未固定（本机已安装；不是构建/运行依赖） | `scripts/generate-app-icon.py` | 合成 `AppIcon.icns`（白色线稿素材 `AppIcon-art.png` + 深色圆角底，§7.3） | **可选（开发）** | `python3 -c 'import PIL; print(PIL.__version__)'` |
 | 许可证/合规文件 | 项目 **Apache-2.0**；第三方见文件 | 仓库根 `LICENSE`、`NOTICE`、`THIRD-PARTY-NOTICES.md` | 分发合规（随 DMG 复制到 `Resources/Licenses/`） | 分发必需 | `ls -l LICENSE NOTICE THIRD-PARTY-NOTICES.md`；`make test-app-bundle`（§8） |
 | FFmpeg（含开发包） | 未固定；本机 ffmpeg 9.0.2_1、libavcodec 63.1.102 | `internal/worker/avc420_build.go`（`//go:build avc420`、`#cgo pkg-config:`）；`Makefile`（`build-avc420-worker` / `test-avc420-*` 目标） | AVC420 实验编码路径 | **可选** | `pkg-config --modversion libavcodec`（§7.1） |
 | Windows App / mstsc | 未固定 | `README.md`（客户端连接步骤见「快速开始 A」） | 人工验收客户端（非构建依赖） | 可选 | 手工验证 |
@@ -250,7 +250,7 @@ make test-freerdp-sdk-selection && make test-freerdp-no-pipe2
 | `make agent-app` | 依赖 `agent-build`，再 `scripts/package-agent-app.py` → ad-hoc 签名 `bin/RDPAgent.app` | TCC 身份产物 |
 | `make agent-check` | 用 `swiftc` 编译手写文件清单（24 个核心源文件 + 6 个测试文件）并运行 | 新增 Swift 文件必须同步该清单（`Makefile` 的 `agent-check` 目标） |
 | `make app-build` | `swift build -c release`（含菜单栏 App） | 不写 `bin/` |
-| `make app-dmg` | `dist/build/{rdp-worker,rdpctl}`、`dist/RDPServer.app/`（含 `Contents/Resources/Licenses/`）、`dist/RDPServer-0.2.3.dmg`、`dist/dmg-staging/` | 打包中间产物也在 `dist/` |
+| `make app-dmg` | `dist/build/{rdp-worker,rdpctl}`、`dist/RDPServer.app/`（含 `Contents/Resources/Licenses/`）、`dist/RDPServer-0.2.4.dmg`、`dist/dmg-staging/` | 打包中间产物也在 `dist/` |
 | `make test-app` | `scripts/test-app-core.py`（App 核心无头契约） | 隔离临时目录/随机端口，不碰 `.runtime` |
 | `make test-app-bundle` | 只读挂载 DMG（`hdiutil attach -readonly`），跑 **17 个命名检查**（`checker.run(...)`，含 `license files` 与 `live data dir untouched`）；另有 1 个 shared 信息项（`shared .runtime unchanged`，OK/WARN，不计入 check 总数）。`--skip-service-check` 时 summary 为 **16 passed + 1 skipped**（总数仍 17） | DMG 缺失时会自动调用打包脚本（`--no-build` 则直接失败） |
 | `make test-virtual-display` | 虚拟显示器集成 harness（6 例） | **会短暂切换真实显示排列**，有活动用户会话时勿跑 |
@@ -276,7 +276,7 @@ make check           # Go race + gfx/avc 策略 + go vet
 make agent-build     # bin/rdp-agent（Swift release）
 make agent-check     # Swift 纯逻辑测试
 make agent-app       # bin/RDPAgent.app（TCC 身份）
-make app-dmg         # 可选：dist/RDPServer.app + dist/RDPServer-0.2.3.dmg
+make app-dmg         # 可选：dist/RDPServer.app + dist/RDPServer-0.2.4.dmg
 make test-app-bundle # 可选：发布前 DMG/bundle 校验
 ```
 
@@ -292,7 +292,7 @@ make test-app-bundle # 可选：发布前 DMG/bundle 校验
 | `make agent-build` | `native/macos/.build/release/rdp-agent` → `bin/rdp-agent` | |
 | `make agent-app` | `bin/RDPAgent.app` | TCC 身份 `com.rdp-server.agent` |
 | `make app-build` | `native/macos/.build/release/{RDPServer,rdp-agent}` | 不写 `bin/` |
-| `make app-dmg` | `dist/build/{rdp-worker,rdpctl}`、`dist/RDPServer.app/`、`dist/RDPServer-0.2.3.dmg`、`dist/dmg-staging/` | 打包中间产物也在 `dist/` |
+| `make app-dmg` | `dist/build/{rdp-worker,rdpctl}`、`dist/RDPServer.app/`、`dist/RDPServer-0.2.4.dmg`、`dist/dmg-staging/` | 打包中间产物也在 `dist/` |
 | `make test-*` | 无持久产物 | 临时目录/随机端口，结束后清理 |
 
 ### 5.4 联网 / 离线边界
@@ -311,19 +311,19 @@ make test-app-bundle # 可选：发布前 DMG/bundle 校验
 - CMake 构建树：`.deps/build`。
 - 忽略规则见 `.gitignore`：构建产物与私有状态（`.deps/`、`.cache/`、`.runtime/`、`bin/`、`native/macos/.build/`、`dist/`、`.worktrees/`、`*.dSYM/`），以及 2026-11-09 增补的卫生条目（`.DS_Store`、`*.log`、`*.dmg`、`*.dmg.zip`、`*.pem`、`*.key`、`*.sock`、`.env`、`.env.*`、`__pycache__/`、`*.pyc`、`.idea/`、`.vscode/`、`.swiftpm/`、`*.xcuserstate`、`*.local.rdp`、`.team/`）。`docs/` 全部入库。
 
-## 6. 版本号管理（当前 0.2.3）
+## 6. 版本号管理（当前 0.2.4）
 
-### 6.1 0.2.3 出现在哪里
+### 6.1 0.2.4 出现在哪里
 
 | 位置 | 内容 | 说明 |
 | --- | --- | --- |
-| `native/macos/Sources/RDPServerCore/Version.swift`（`RDPServerCoreVersion.value`） | `public static let value = "0.2.3"` | 唯一源码版本常量；`RDPServer --version`（`RDPServerCLI.swift` 的 `--version` 分支）与 `--status` JSON（`StatusReport.swift` 的 `appVersion`）都读它 |
-| `scripts/package-app-dmg.py`（`VERSION`） | `VERSION = "0.2.3"` | 决定 `Info.plist` 的 `CFBundleShortVersionString`（`info_plist()`）与 DMG 文件名（`DMG_PATH`） |
+| `native/macos/Sources/RDPServerCore/Version.swift`（`RDPServerCoreVersion.value`） | `public static let value = "0.2.4"` | 唯一源码版本常量；`RDPServer --version`（`RDPServerCLI.swift` 的 `--version` 分支）与 `--status` JSON（`StatusReport.swift` 的 `appVersion`）都读它 |
+| `scripts/package-app-dmg.py`（`VERSION`） | `VERSION = "0.2.4"` | 决定 `Info.plist` 的 `CFBundleShortVersionString`（`info_plist()`）与 DMG 文件名（`DMG_PATH`） |
 | `scripts/package-app-dmg.py`（`BUILD_NUMBER`） | `BUILD_NUMBER = "1"` | `CFBundleVersion`，与产品版本号独立 |
-| `scripts/test-app-bundle.py`（`DMG_PATH`/`EXPECTED_VERSION`） | `DMG_PATH = ...RDPServer-0.2.3.dmg`、`EXPECTED_VERSION = "0.2.3"` | 打包校验的期望值；不同步会直接 fail |
-| `scripts/test-app-core.py`（`--version` 断言） | 断言 `--version` 输出含 `"0.2.3"` | App 核心无头测试 |
-| `THIRD-PARTY-NOTICES.md` 顶部「适用产物」 | 「适用产物：发布用 DMG / App（`make app-dmg` 生成 `dist/RDPServer-0.2.3.dmg` 与 `dist/RDPServer.app`）」 | 发布产物引用；改产品版本号时同步（组件版本/许可证表格不随产品版本变） |
-| `scripts/package-agent-app.py`（`DEFAULT_VERSION`） | `DEFAULT_VERSION = "0.1.0"` | **独立** `make agent-app`（`bin/RDPAgent.app`）的默认版本；`make app-dmg` 调用时会显式传 `version=VERSION`（`assemble_app()`），故 DMG 内嵌套 Agent 是 0.2.3、而独立 app 是 0.1.0。这是两个不同的发布物，改版本时注意区分 |
+| `scripts/test-app-bundle.py`（`DMG_PATH`/`EXPECTED_VERSION`） | `DMG_PATH = ...RDPServer-0.2.4.dmg`、`EXPECTED_VERSION = "0.2.4"` | 打包校验的期望值；不同步会直接 fail |
+| `scripts/test-app-core.py`（`--version` 断言） | 断言 `--version` 输出含 `"0.2.4"` | App 核心无头测试 |
+| `THIRD-PARTY-NOTICES.md` 顶部「适用产物」 | 「适用产物：发布用 DMG / App（`make app-dmg` 生成 `dist/RDPServer-0.2.4.dmg` 与 `dist/RDPServer.app`）」 | 发布产物引用；改产品版本号时同步（组件版本/许可证表格不随产品版本变） |
+| `scripts/package-agent-app.py`（`DEFAULT_VERSION`） | `DEFAULT_VERSION = "0.1.0"` | **独立** `make agent-app`（`bin/RDPAgent.app`）的默认版本；`make app-dmg` 调用时会显式传 `version=VERSION`（`assemble_app()`），故 DMG 内嵌套 Agent 是 0.2.4、而独立 app 是 0.1.0。这是两个不同的发布物，改版本时注意区分 |
 | `README.md`、`AGENTS.md`、`docs/*` | DMG 文件名/版本描述 | 对外文档需同步；历史 `docs/` 记录是历史证据，按项目约定不改写 |
 
 ### 6.2 升级版本号的清单
@@ -368,10 +368,10 @@ plutil -p dist/RDPServer.app/Contents/Info.plist | grep -E 'ShortVersion|BundleV
 
 ### 7.3 图标资源与 Pillow（仅重生成图标时需要）
 
-- 应用图标 `native/macos/Resources/AppIcon.icns` 是**原创几何寻呼机**图形，由 `scripts/generate-app-icon.py` 用 Pillow 绘制、macOS `iconutil` 打包生成；不含 Apple Color Emoji 位图（旧 Emoji 图标已移除）。
+- 应用图标 `native/macos/Resources/AppIcon.icns` 由**白色线稿寻呼机素材** `native/macos/Resources/AppIcon-art.png`（透明底、白色描边）合成：`scripts/generate-app-icon.py` 裁掉素材透明边距，铺到深色圆角底（渐变 + 细高光 + 发丝描边 + 柔和投影）上，再由 macOS `iconutil` 打包；不含 Apple Color Emoji 位图（旧 Emoji 图标已移除）。
 - Pillow 是**环境/开发依赖，不是构建或运行依赖**：`make app-dmg` 只复制现成的 `.icns`（`scripts/package-app-dmg.py`：`assemble_app()` 复制 `APP_ICON_SOURCE`，`info_plist()` 写入 `CFBundleIconFile = AppIcon`），不执行图标脚本；仓库也没有 requirements 文件。缺 Pillow 时脚本会给出明确错误并退出。
-- 重新生成（会覆盖被跟踪的 `.icns`）：`python3 scripts/generate-app-icon.py`；`--verify-only` 只校验；`--preview` / `--iconset` 输出到临时路径。渲染确定性由 4x 绘制 + LANCZOS 保证（同一 Pillow/iconutil 版本）。
-- 菜单栏状态项的字形仍是「📟」字符（`native/macos/Sources/RDPServer/MenuBarIcon.swift`（状态项字形字符串）），由系统的 emoji 字体在运行期渲染，不随包分发任何 emoji 位图；它与 App 图标资源是两件事。
+- 重新生成（会覆盖被跟踪的 `.icns`）：`python3 scripts/generate-app-icon.py`；`--verify-only` 只校验；`--preview` / `--iconset` 输出到临时路径；`--art PATH` 可换素材。渲染确定性由 4x 绘制 + LANCZOS 保证（同一 Pillow/iconutil 版本）。
+- 菜单栏状态项不再是 emoji：`native/macos/Sources/RDPServer/MenuBarIcon.swift` 用 NSBezierPath 绘制寻呼机模板图（`isTemplate = true`，1x/2x 位图），由系统按菜单栏外观着黑白，不随包分发任何位图资源；它与 App 图标（`.icns`）是两件事。
 
 ## 8. 第三方许可证与合规
 
@@ -379,7 +379,7 @@ plutil -p dist/RDPServer.app/Contents/Info.plist | grep -E 'ShortVersion|BundleV
 
 | 组件 | 版本 | 许可证 | 许可证文本位置 | 分发形态 |
 | --- | --- | --- | --- | --- |
-| **本项目（rdp-server）** | 0.2.3 | **Apache-2.0** | 仓库根 `LICENSE`（Apache License 2.0 全文）与 `NOTICE` | 源码；DMG 内 `Contents/Resources/Licenses/{LICENSE,NOTICE,THIRD-PARTY-NOTICES.md}` |
+| **本项目（rdp-server）** | 0.2.4 | **Apache-2.0** | 仓库根 `LICENSE`（Apache License 2.0 全文）与 `NOTICE` | 源码；DMG 内 `Contents/Resources/Licenses/{LICENSE,NOTICE,THIRD-PARTY-NOTICES.md}` |
 | FreeRDP（含 WinPR） | 3.32.2 | **Apache-2.0** | 上游归档根 `LICENSE`（与仓库 `LICENSE` 同为 Apache-2.0 全文）；归档**无 archive 级 NOTICE**；唯一 NOTICE 是 AOSP cpufeatures（Android-only，macOS 不编译，见 §8.5） | DMG 内 4 个 dylib（freerdp3/server/client、winpr3） |
 | OpenSSL | 3.5.9（Homebrew，仓库未固定版本） | **Apache-2.0** | `$(brew --prefix openssl@3)/LICENSE.txt`；仓库 `LICENSE` 提供同一许可证全文 | DMG 内 `libssl.3`、`libcrypto.3` |
 | json-c | 0.19（Homebrew，未固定；soname `libjson-c.5`） | **MIT** | `$(brew --prefix json-c)/COPYING`；MIT 全文与版权行见 [THIRD-PARTY-NOTICES.md](../THIRD-PARTY-NOTICES.md) §3.2 | DMG 内 `libjson-c.5` |
@@ -411,7 +411,7 @@ make test-app-bundle                                      # 含 "license files" 
 如需检查 DMG 内的最终形态（只读挂载，卷名 `RDP Server`）：
 
 ```sh
-hdiutil attach -readonly -nobrowse dist/RDPServer-0.2.3.dmg
+hdiutil attach -readonly -nobrowse dist/RDPServer-0.2.4.dmg
 ls -l "/Volumes/RDP Server/RDPServer.app/Contents/Resources/Licenses"
 hdiutil detach "/Volumes/RDP Server"
 ```
@@ -485,7 +485,7 @@ for f in dist/RDPServer.app/Contents/Frameworks/*.dylib \
   printf '%s: ' "$f"; vtool -show-build "$f" | grep minos
 done
 ls -l dist/RDPServer.app/Contents/Resources/Licenses/   # 许可证随包
-shasum -a 256 dist/RDPServer-0.2.3.dmg
+shasum -a 256 dist/RDPServer-0.2.4.dmg
 ```
 
 **结论**：当前是"**同一台机器、同一 Homebrew 状态**可重建"的开发流程；不是可分发级别、也不是逐字节可复现的构建。若要进一步提升（面向可复现发布），优先级建议：固定工具链版本（Go/Swift/CMake）、自建并固定 OpenSSL/json-c（或用 FreeRDP 内置实现/静态链接）、加 CI 与 `-trimpath`、把 FreeRDP 构建选项与许可证纳入发布流水线。

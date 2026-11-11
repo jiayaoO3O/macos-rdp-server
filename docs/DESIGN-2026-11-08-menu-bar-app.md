@@ -44,7 +44,7 @@
 ## 2. 代码结构
 
     native/macos/Sources/RDPServerCore/
-      Version.swift             版本常量（当前 0.2.3）
+      Version.swift             版本常量（当前 0.2.4）
       SecureFile.swift          0600 原子写 / lstat 校验（tmp+rename，fchmod，fsync）
       ServerPaths.swift         数据目录解析与私有布局校验；socket 路径长度校验
       HelperLocator.swift       helper 解析顺序：env -> bundle Contents/Helpers -> repo/bin -> 可执行文件目录
@@ -392,7 +392,7 @@ releaseStuckKeys() 返回 notSupported 并记录 result=not_supported。UI 必�
 
     {
       "account": null, "address": "127.0.0.1:3389", "agent": {"detail": null, "state": "waiting"},
-      "allow_lan": false, "app_version": "0.2.3", "configured": false,
+      "allow_lan": false, "app_version": "0.2.4", "configured": false,
       "data_directory": "/tmp/x/data", "enabled": false, "error": null, "last_error": null,
       "listen_host": "127.0.0.1", "logs_directory": "/tmp/x/data/logs", "ok": true,
       "permissions": {"accessibility": true, "screen_recording": true},

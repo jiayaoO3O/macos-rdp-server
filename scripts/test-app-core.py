@@ -365,7 +365,7 @@ def test_version_and_help(executable, workdir, helpers):
     environment = child_environment(workdir, helpers)
     completed = run_cli(executable, ["--version"], environment, timeout=30)
     require_equal(completed.returncode, 0, "--version exit code")
-    require("0.2.3" in completed.stdout, "--version output: %r" % completed.stdout)
+    require("0.2.4" in completed.stdout, "--version output: %r" % completed.stdout)
     completed = run_cli(executable, ["--help"], environment, timeout=30)
     require_equal(completed.returncode, 0, "--help exit code")
     require("--self-test" in completed.stdout, "--help output is missing --self-test")

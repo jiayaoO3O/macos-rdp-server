@@ -11,7 +11,7 @@
 | 项目 | macOS RDP **早期原型**：让已在本机登录的 Mac 用户用 Windows RDP 客户端控制**当前用户桌面** |
 | 语言 | Go 1.27（无第三方 Go 依赖）+ cgo C（FreeRDP/WinPR 3.32.2）+ Swift（SwiftPM tools 5.9）+ Python 3（脚本仅标准库；图标脚本可选 Pillow）+ Makefile |
 | 形态 | 菜单栏 App `RDPServer.app` 自管 worker + 嵌套 Agent（推荐/已验收）；手工 `bin/rdp-worker` + Agent / LaunchAgent 为开发者形态 |
-| 版本 | `0.2.3`（`native/macos/Sources/RDPServerCore/Version.swift`） |
+| 版本 | `0.2.4`（`native/macos/Sources/RDPServerCore/Version.swift`） |
 | 平台 | Apple Silicon / arm64（仅）；最低 **macOS 14.0**；macOS 26/27 构建兼容见 DEPENDENCIES §4.3 |
 | 依赖 | FreeRDP/WinPR **3.32.2**（归档 SHA-256 固定）、Homebrew `openssl@3`、`json-c`、`pkgconf`、CMake 4.x（实测可用）、Xcode Command Line Tools（无需完整 Xcode） |
 | 许可证 | 项目 **Apache-2.0**；FreeRDP/WinPR 与 OpenSSL 为 Apache-2.0，json-c 为 MIT，Go runtime 为 BSD-3-Clause（静态链接进 helper；见 `THIRD-PARTY-NOTICES.md`） |
@@ -96,7 +96,7 @@
 | `make test-protocol` | 依赖 `make build`，跑 35 例 loopback E2E（~90–100 s）；会覆盖 `bin/` |
 | `make agent-build` / `agent-check` | 构建 `bin/rdp-agent` / 用 `swiftc` 编译手写清单并跑纯逻辑测试 |
 | `make agent-app` | 打包 ad-hoc 签名 `bin/RDPAgent.app`（TCC 身份；部署 Agent 的正确产物） |
-| `make app-build` / `app-dmg` | Swift release 构建（含菜单栏 App）/ 组装 `dist/RDPServer.app` + `dist/RDPServer-0.2.3.dmg`（不覆盖 `bin/`） |
+| `make app-build` / `app-dmg` | Swift release 构建（含菜单栏 App）/ 组装 `dist/RDPServer.app` + `dist/RDPServer-0.2.4.dmg`（不覆盖 `bin/`） |
 | `make test-app` / `test-app-bundle` | App 核心无头契约 / 只读挂载 DMG 的 bundle 校验（项数以脚本为准） |
 | `make test-virtual-display` | 虚拟显示器集成 harness（6 例）。**会短暂切换真实显示排列**，有活动用户会话时勿跑 |
 | `make test-freerdp-sdk-selection` / `test-freerdp-no-pipe2` | 守护 macOS 26/27 SDK 选择与 `WINPR_HAVE_PIPE2=OFF` 构建配置 |
@@ -111,7 +111,7 @@ make build       # bin/rdp-worker、bin/rdp-probe、bin/rdpctl
 make check       # Go race + C/AVC harness + vet
 make agent-build && make agent-check
 make agent-app   # bin/RDPAgent.app（TCC 身份）
-make app-dmg     # 可选：dist/RDPServer.app + dist/RDPServer-0.2.3.dmg
+make app-dmg     # 可选：dist/RDPServer.app + dist/RDPServer-0.2.4.dmg
 make test-app-bundle   # 可选：发布前 bundle 校验
 ```
 

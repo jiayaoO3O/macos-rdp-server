@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the packaged RDPServer.app inside dist/RDPServer-0.2.3.dmg (stdlib only).
+"""Verify the packaged RDPServer.app inside dist/RDPServer-0.2.4.dmg (stdlib only).
 
 Checks the drag-install artifact as a user would get it:
 
@@ -39,13 +39,13 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
-DMG_PATH = DIST / "RDPServer-0.2.3.dmg"
+DMG_PATH = DIST / "RDPServer-0.2.4.dmg"
 PACKAGER = ROOT / "scripts/package-app-dmg.py"
 
 APP_NAME = "RDPServer.app"
 APP_EXECUTABLE = "RDPServer"
 BUNDLE_ID = "com.rdp-server.server"
-EXPECTED_VERSION = "0.2.3"
+EXPECTED_VERSION = "0.2.4"
 NESTED_AGENT_NAME = "RDPAgent.app"
 NESTED_AGENT_EXECUTABLE = "rdp-agent"
 AGENT_BUNDLE_ID = "com.rdp-server.agent"
